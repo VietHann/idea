@@ -1,0 +1,6 @@
+extends: lrs2.yaml
+dataset: dynamic_lrs2
+data:
+  train_manifest: generated/dynamic_lrs2/train.jsonl
+  valid_manifest: generated/dynamic_lrs2/valid.jsonl
+  test_manifest: generated/dynamic_lrs2/test.jsonl

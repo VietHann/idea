@@ -1,0 +1,19 @@
+name: cm-xbeam
+channels: [pytorch, nvidia, conda-forge]
+dependencies:
+  - python=3.11
+  - pip
+  - numpy
+  - scipy
+  - libsndfile
+  - pip:
+      - torch>=2.2
+      - soundfile>=0.12
+      - h5py>=3.8
+      - PyYAML>=6
+      - einops>=0.7
+      - xlstm==2.0.5
+      - pystoi>=0.4
+      - pesq>=0.0.4
+# Choose a PyTorch CUDA wheel compatible with the actual GPU driver.
+# Create the prefix INSIDE this project, not a global conda environment.

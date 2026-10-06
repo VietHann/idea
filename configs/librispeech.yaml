@@ -1,0 +1,12 @@
+extends: base.yaml
+dataset: librispeech
+model:
+  num_channels: 3
+  sample_rate: 8000
+  n_fft: 256
+  hop_length: 64
+data:
+  root: /project/anhlt/0607/jnf_mamba_experiment/paper_reproduction/data_original_var_pos_parallel_sp1/8k
+  train_manifest: manifests/librispeech/train.jsonl
+  valid_manifest: manifests/librispeech/valid.jsonl
+  test_manifest: manifests/librispeech/test.jsonl

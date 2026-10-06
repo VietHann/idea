@@ -1,0 +1,7 @@
+extends: lrs2.yaml
+model:
+  num_sources: 3
+data:
+  train_manifest: manifests/lrs2_3speakers/train.jsonl
+  valid_manifest: manifests/lrs2_3speakers/valid.jsonl
+  test_manifest: manifests/lrs2_3speakers/test.jsonl

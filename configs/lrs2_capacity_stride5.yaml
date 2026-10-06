@@ -1,0 +1,9 @@
+extends: lrs2_capacity.yaml
+data:
+  direction_stride: 5
+  direction_offset: 0
+  direction_subset_splits: [train]
+# Select group indices 0,5,10,...,175 out of the 180 original groups.
+# Original 2-degree grid -> -180,-170,...,170 degrees (36 groups).
+# Keep all 300 mixtures/group: 10,800 train items; validation/test unchanged.
+# Optimizer curriculum is intentionally inherited unchanged (120,000 steps).

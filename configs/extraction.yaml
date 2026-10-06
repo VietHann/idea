@@ -1,0 +1,8 @@
+extends: lrs2.yaml
+model:
+  num_sources: 1
+data:
+  task: extraction
+  train_manifest: manifests/lrs2/train.jsonl
+  valid_manifest: manifests/lrs2/valid.jsonl
+  test_manifest: manifests/lrs2/test.jsonl

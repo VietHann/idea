@@ -1,0 +1,11 @@
+extends: lrs2.yaml
+model:
+  dim: 128
+  encoder_blocks: 8
+  memory_blocks: 2
+  memory_ff_dim: 4096
+  memory_heads: 4
+  refiner_blocks: 4
+  refiner_dim: 128
+  refiner_heads: 4
+  refiner_ff_dim: 2048

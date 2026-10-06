@@ -1,0 +1,7 @@
+extends: librispeech.yaml
+dataset: librispeech_16k
+model:
+  sample_rate: 16000
+  n_fft: 512
+  hop_length: 128
+# The loader resamples mixture and every source image with the same filter.

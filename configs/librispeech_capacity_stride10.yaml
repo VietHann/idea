@@ -1,0 +1,7 @@
+extends: librispeech_capacity.yaml
+data:
+  direction_stride: 10
+  direction_offset: 0
+  direction_subset_splits: [train]
+# Same 18-group selection as LRS2; native sample rate remains 8 kHz.
+# Validation/test, model architecture and optimizer schedule are unchanged.

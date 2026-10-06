@@ -1,0 +1,12 @@
+extends: base.yaml
+dataset: lrs2
+model:
+  num_channels: 3
+  sample_rate: 16000
+  n_fft: 512
+  hop_length: 128
+data:
+  root: /project/anhlt/0607/lrs2_paper_simulated_dataset_separate_v2_20260811
+  train_manifest: manifests/lrs2/train.jsonl
+  valid_manifest: manifests/lrs2/valid.jsonl
+  test_manifest: manifests/lrs2/test.jsonl

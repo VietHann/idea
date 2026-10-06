@@ -1,0 +1,7 @@
+extends: librispeech_capacity.yaml
+data:
+  direction_stride: 5
+  direction_offset: 0
+  direction_subset_splits: [train]
+# Same direction-group selection as LRS2; sample rate remains 8 kHz.
+# No source files, metadata angles, batch size or optimizer schedule are changed.

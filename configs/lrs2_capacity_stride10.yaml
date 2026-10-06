@@ -1,0 +1,8 @@
+extends: lrs2_capacity.yaml
+data:
+  direction_stride: 10
+  direction_offset: 0
+  direction_subset_splits: [train]
+# Group indices 0,10,20,...,170: 18/180 groups, 300 mixtures per group.
+# Original 2-degree grid -> -180,-160,...,160 degrees, not 10-degree spacing.
+# Train: 5,400 mixtures. Validation/test and the 120,000-step schedule stay unchanged.

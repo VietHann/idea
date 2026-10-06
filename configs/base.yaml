@@ -1,0 +1,67 @@
+model:
+  sample_rate: 16000
+  n_fft: 512
+  hop_length: 128
+  num_channels: 6
+  num_sources: 2
+  reference_mic: 0
+  dim: 96
+  encoder_blocks: 3
+  memory_blocks: 2
+  memory_heads: 4
+  memory_ff_dim: 384
+  refiner_blocks: 2
+  refiner_dim: 96
+  refiner_heads: 4
+  refiner_ff_dim: 384
+  checkpoint_frames: true
+  memory_type: mlstm
+  scm_mode: psd
+  beamformer: mvdr
+  residual: nullspace
+  uncertainty: true
+  lambda_min: 0.50
+  lambda_max: 0.999
+  fixed_lambda: 0.95
+  alpha_max: 0.25
+  load_scale: 0.001
+  load_floor: 0.000001
+data:
+  train_manifest: manifests/train.jsonl
+  valid_manifest: manifests/valid.jsonl
+  test_manifest: manifests/test.jsonl
+  crop_seconds: 4.0
+  task: separation
+  augmentation:
+    gain_db: 1.0
+    dropout_probability: 0.05
+train:
+  seed: 0
+  seeds: [0, 1, 2, 3, 4]
+  batch_size: 2
+  accumulation_steps: 8
+  num_workers: 0
+  learning_rate: 0.0003
+  weight_decay: 0.01
+  gradient_clip: 5.0
+  warmup_steps: 10000
+  bf16: true
+  deterministic: false
+  validate_every: 1000
+  checkpoint_every: 1000
+  log_every: 10
+  curriculum:
+    A: 10000
+    B: 40000
+    C: 30000
+    D: 40000
+loss:
+  complex_weight: 0.2
+  scm_weight: 0.05
+  uncertainty_weight: 0.02
+  residual_weight: 0.001
+  mask_weight: 0.05
+evaluation:
+  batch_size: 1
+  perceptual: true
+  bootstrap_resamples: 10000

@@ -1,0 +1,5 @@
+extends: librispeech.yaml
+model:
+  num_sources: 1
+data:
+  task: extraction
