@@ -1,0 +1,66 @@
+
+        container.run(.sequence([
+            .group([.fadeIn(withDuration: 0.18), .scale(to: 1.0, duration: 0.24)]),
+            .wait(forDuration: 2.1),
+            .group([.fadeOut(withDuration: 0.25), .moveBy(x: 0, y: 16, duration: 0.25)]),
+            .removeFromParent()
+        ]))
+    }
+
+    private func startMusic() {
+        let node = SKAudioNode(fileNamed: "blob_theme.wav")
+        node.autoplayLooped = true
+        node.isPositional = false
+        addChild(node)
+        musicNode = node
+    }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let t = touches.first else { return }
+        if gameEnded {
+            let p = t.location(in: cameraNode)
+            let nodes = cameraNode.nodes(at: p)
+            if nodes.contains(where: { $0.name == "restartButton" }) { restartGame() }
+            return
+        }
+        joystickTouch = t
+        joystickStart = t.location(in: cameraNode)
+        joystickBase.position = joystickStart
+        joystickKnob.position = joystickStart
+        joystickBase.isHidden = false
+        joystickKnob.isHidden = false
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let t = joystickTouch, touches.contains(t) else { return }
+        let p = t.location(in: cameraNode)
+        var dx = p.x - joystickStart.x
+        var dy = p.y - joystickStart.y
+        let len = max(1, hypot(dx, dy))
+        let maxR: CGFloat = 46
+        let clamped = min(maxR, len)
+        dx = dx / len * clamped
+        dy = dy / len * clamped
+        joystickKnob.position = CGPoint(x: joystickStart.x + dx, y: joystickStart.y + dy)
+        moveVector = CGVector(dx: dx / maxR, dy: dy / maxR)
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) { endJoystick(touches) }
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) { endJoystick(touches) }
+
+    private func endJoystick(_ touches: Set<UITouch>) {
+        guard let t = joystickTouch, touches.contains(t) else { return }
+        joystickTouch = nil
+        moveVector = .zero
+        joystickBase.isHidden = true
+        joystickKnob.isHidden = true
+    }
+}
+
+private extension SKShapeNode {
+    func anchorPointHack(x: CGFloat) {
+        guard let path = self.path else { return }
+        let box = path.boundingBox
+        self.position.x -= box.width * (0.5 - x)
+    }
+}
