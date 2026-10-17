@@ -1,0 +1,95 @@
+        mutationTimer -= dt
+        if mutationTimer <= 0 && activeMutation != nil { clearMutation() }
+
+        if eventTimer <= 0 {
+            triggerRandomEvent()
+            eventTimer = Double.random(in: 15...22)
+        }
+
+        let speed = movementSpeed
+        player.position.x += moveVector.dx * speed * dt
+        player.position.y += moveVector.dy * speed * dt
+        player.position.x = max(-worldSize.width/2 + 80, min(worldSize.width/2 - 80, player.position.x))
+        player.position.y = max(-worldSize.height/2 + 80, min(worldSize.height/2 - 80, player.position.y))
+
+        updateNPCs(dt: dt)
+        updateTaxVan(dt: dt)
+        updateConsumption()
+        updateCamera(dt: dt)
+        updateHUD()
+    }
+
+    private var movementSpeed: CGFloat {
+        var base: CGFloat = 250 + min(110, playerMass * 3)
+        if activeMutation == .caffeine { base *= 1.75 }
+        return base
+    }
+
+    private func updateCamera(dt: TimeInterval) {
+        let lerp = min(1, CGFloat(dt) * 7.0)
+        cameraNode.position.x += (player.position.x - cameraNode.position.x) * lerp
+        cameraNode.position.y += (player.position.y - cameraNode.position.y) * lerp
+        let targetScale = max(0.66, 1.0 - (playerMass / 95.0) * 0.25)
+        cameraNode.setScale(cameraNode.xScale + (targetScale - cameraNode.xScale) * lerp)
+    }
+
+    private func updateNPCs(dt: TimeInterval) {
+        let wifi = activeMutation == .freeWifi
+        let authority = activeMutation == .roadAuthority
+        for npc in npcNodes where npc.parent != nil {
+            let v = CGVector(dx: player.position.x - npc.position.x, dy: player.position.y - npc.position.y)
+            let dist = max(1, hypot(v.dx, v.dy))
+            let near = dist < (wifi ? 650 : 400)
+            var dir = CGVector(dx: 0, dy: 0)
+            if near {
+                let sign: CGFloat = wifi ? 1 : -1
+                dir = CGVector(dx: v.dx / dist * sign, dy: v.dy / dist * sign)
+            } else {
+                let t = CGFloat(elapsed * 0.7) + CGFloat(abs(npc.hashValue % 100))
+                dir = CGVector(dx: cos(t), dy: sin(t*0.8))
+            }
+            let fleeBoost: CGFloat = authority ? 1.55 : 1.0
+            npc.position.x += dir.dx * 72 * fleeBoost * dt
+            npc.position.y += dir.dy * 72 * fleeBoost * dt
+            npc.xScale = dir.dx < 0 ? -abs(npc.xScale) : abs(npc.xScale)
+        }
+    }
+
+    private func updateTaxVan(dt: TimeInterval) {
+        guard let van = taxVan, van.parent != nil else { return }
+        let v = CGVector(dx: player.position.x - van.position.x, dy: player.position.y - van.position.y)
+        let dist = max(1, hypot(v.dx, v.dy))
+        van.position.x += v.dx / dist * 190 * dt
+        van.position.y += v.dy / dist * 190 * dt
+        if dist < player.size.width * 0.46 + 55 {
+            score = max(0, score - 250)
+            chaos = max(0, chaos - 18)
+            popText("TAXED -250 💀", at: player.position, color: .systemRed, big: true)
+            Haptics.heavy()
+            run(.playSoundFileNamed("bonk.wav", waitForCompletion: false))
+            van.removeFromParent(); taxVan = nil
+        }
+    }
+
+    private func updateConsumption() {
+        let radius = player.size.width * 0.40
+        let gymBoost: CGFloat = activeMutation == .gymBro ? 1.35 : 1.0
+        for node in entities where node.parent != nil {
+            guard let data = node.userData,
+                  let massNumber = data["mass"] as? NSNumber,
+                  let display = data["display"] as? String,
+                  let pointsNumber = data["points"] as? NSNumber else { continue }
+            let mass = CGFloat(massNumber.doubleValue)
+            let points = pointsNumber.intValue
+            let dist = hypot(node.position.x-player.position.x, node.position.y-player.position.y)
+            if dist > radius + node.size.width * 0.32 { continue }
+
+            let canEat = playerMass * gymBoost >= mass * 0.92
+            if canEat {
+                if node.name == "cityHall" {
+                    consume(node, mass: mass, points: points, display: display)
+                    winGame()
+                    return
+                }
+                consume(node, mass: mass, points: points, display: display)
+            } else if dist < radius + node.size.width * 0.18 {
