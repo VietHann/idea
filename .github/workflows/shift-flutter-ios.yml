@@ -43,6 +43,7 @@ jobs:
           mkdir -p shift-work/source shift-work/app
           tar -xzf shift-build/SHIFT-source-fixed.tar.gz -C shift-work/source
           test -f shift-work/source/SHIFT/lib/main.dart
+          sed -i '' 's/options: \[.lossyCompressionQuality: 0.96\]/options: [:]/' shift-work/source/SHIFT/ios_custom/AppDelegate.swift
           flutter create \
             --project-name shift \
             --org app.viethannn \
@@ -112,5 +113,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: SHIFT-0.1.0-source
-          path: shift-build/SHIFT-source-fixed.tar.gz
+          path: shift-work/source/SHIFT
           retention-days: 30
