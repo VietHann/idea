@@ -1,0 +1,163 @@
+name: Build MORI 1.0 Full Offline IPA
+
+on:
+  push:
+    branches: [mori-full-v1]
+
+concurrency:
+  group: mori-full-v1
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+          architecture: ARM64
+
+      - name: Reconstruct and verify MORI 1.0 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/mori-src /tmp/MORI-1.0.0-source.tar.gz
+          mkdir -p /tmp/mori-src
+          cat mori-v1-pack/part* | base64 -D > /tmp/MORI-1.0.0-source.tar.gz
+          echo "613c36edaa26f339f18de987122e9559c6b6cc1cbcf91891fe85704d4b4873fa  /tmp/MORI-1.0.0-source.tar.gz" | shasum -a 256 -c -
+          tar -tzf /tmp/MORI-1.0.0-source.tar.gz >/dev/null
+          tar -xzf /tmp/MORI-1.0.0-source.tar.gz -C /tmp/mori-src
+          test -f /tmp/mori-src/MORI/pubspec.yaml
+          test -f /tmp/mori-src/MORI/lib/main.dart
+          test -f /tmp/mori-src/MORI/lib/core/storage/local_database.dart
+          test -f /tmp/mori-src/MORI/lib/core/services/backup_service.dart
+          test -f /tmp/mori-src/MORI/lib/features/universe/universe_screen.dart
+          test -f /tmp/mori-src/MORI/test/memory_test.dart
+
+      - name: Create clean Flutter iOS project
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf mori-build
+          flutter create --platforms=ios --org app.viethannn --project-name mori mori-build
+          rm -rf mori-build/lib mori-build/test mori-build/tools
+          cp -R /tmp/mori-src/MORI/lib mori-build/lib
+          cp -R /tmp/mori-src/MORI/test mori-build/test
+          cp -R /tmp/mori-src/MORI/tools mori-build/tools
+          cp /tmp/mori-src/MORI/pubspec.yaml mori-build/pubspec.yaml
+          cp /tmp/mori-src/MORI/analysis_options.yaml mori-build/analysis_options.yaml
+          cp /tmp/mori-src/MORI/README.md mori-build/README.md
+
+          INFO="mori-build/ios/Runner/Info.plist"
+          set_plist() {
+            local key="$1" value="$2"
+            /usr/libexec/PlistBuddy -c "Set :$key $value" "$INFO" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :$key string $value" "$INFO"
+          }
+          set_plist CFBundleDisplayName MORI
+          set_plist NSPhotoLibraryUsageDescription "MORI uses your photo library only when you choose a photo for a memory."
+          set_plist NSCameraUsageDescription "MORI uses the camera only when you choose to capture a memory."
+          set_plist NSMicrophoneUsageDescription "MORI uses the microphone only when you record a short sound for a memory."
+          set_plist NSLocationWhenInUseUsageDescription "MORI can optionally save coordinates with a memory. Location stays on this iPhone."
+
+          cd mori-build
+          flutter pub get
+
+      - name: Format source
+        working-directory: mori-build
+        run: dart format lib test
+
+      - name: Generate MORI app icon
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd mori-build
+          swift tools/generate_icon.swift /tmp/mori_icon_1024.png
+          file /tmp/mori_icon_1024.png | grep -q 'PNG image data, 1024 x 1024'
+          python3 - <<'PY'
+          import json, pathlib, subprocess
+          root = pathlib.Path('ios/Runner/Assets.xcassets/AppIcon.appiconset')
+          data = json.loads((root/'Contents.json').read_text())
+          written = 0
+          for item in data.get('images', []):
+              fn, size, scale = item.get('filename'), item.get('size'), item.get('scale')
+              if not fn or not size or not scale:
+                  continue
+              points = float(size.split('x')[0])
+              factor = int(scale.rstrip('x'))
+              pixels = int(round(points * factor))
+              subprocess.run(['sips','-z',str(pixels),str(pixels),'/tmp/mori_icon_1024.png','--out',str(root/fn)], check=True, stdout=subprocess.DEVNULL)
+              written += 1
+          if written == 0:
+              raise SystemExit('No app icon slots were written')
+          PY
+
+      - name: Flutter analyze
+        working-directory: mori-build
+        run: flutter analyze --fatal-infos
+
+      - name: Unit tests
+        working-directory: mori-build
+        run: flutter test
+
+      - name: Build iPhone Release
+        working-directory: mori-build
+        run: flutter build ios --release --no-codesign
+
+      - name: Verify built app and offline contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="mori-build/build/ios/iphoneos/Runner.app"
+          test -d "$APP"
+          test -f "$APP/Runner"
+          test -f "$APP/Assets.car"
+          test -d "$APP/Frameworks/App.framework/flutter_assets"
+          file "$APP/Runner" | grep -qi arm64
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")" = "app.viethannn.mori"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Info.plist")" = "1.0.0"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Info.plist")" = "10"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP/Info.plist")" = "MORI"
+          ! grep -R -I -E 'firebase|supabase|analytics|http[s]?://' mori-build/lib mori-build/pubspec.yaml
+          grep -R -I -q 'VietHannn' mori-build/lib
+
+      - name: Package unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/mori-ipa
+          mkdir -p /tmp/mori-ipa/Payload
+          cp -R mori-build/build/ios/iphoneos/Runner.app /tmp/mori-ipa/Payload/Runner.app
+          cd /tmp/mori-ipa
+          zip -qry "$GITHUB_WORKSPACE/MORI-1.0.0-unsigned.ipa" Payload
+          test -s "$GITHUB_WORKSPACE/MORI-1.0.0-unsigned.ipa"
+          shasum -a 256 "$GITHUB_WORKSPACE/MORI-1.0.0-unsigned.ipa"
+
+      - name: Prepare formatted source artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/mori-src/MORI/lib /tmp/mori-src/MORI/test
+          cp -R mori-build/lib /tmp/mori-src/MORI/lib
+          cp -R mori-build/test /tmp/mori-src/MORI/test
+          tar -czf MORI-1.0.0-source.tar.gz -C /tmp/mori-src MORI
+          shasum -a 256 MORI-1.0.0-source.tar.gz
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: MORI-1.0.0-IPA
+          path: MORI-1.0.0-unsigned.ipa
+          if-no-files-found: error
+
+      - name: Upload source
+        uses: actions/upload-artifact@v4
+        with:
+          name: MORI-1.0.0-source
+          path: MORI-1.0.0-source.tar.gz
+          if-no-files-found: error
