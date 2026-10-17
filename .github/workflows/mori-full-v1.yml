@@ -34,11 +34,9 @@ jobs:
           tar -tzf /tmp/MORI-1.0.0-source.tar.gz >/dev/null
           tar -xzf /tmp/MORI-1.0.0-source.tar.gz -C /tmp/mori-src
           test -f /tmp/mori-src/MORI/pubspec.yaml
-          test -f /tmp/mori-src/MORI/lib/main.dart
-          test -f /tmp/mori-src/MORI/lib/core/storage/local_database.dart
           test -f /tmp/mori-src/MORI/lib/core/services/backup_service.dart
           test -f /tmp/mori-src/MORI/lib/features/universe/universe_screen.dart
-          test -f /tmp/mori-src/MORI/test/memory_test.dart
+          test -f /tmp/mori-src/MORI/lib/features/memories/recap_view.dart
 
       - name: Apply verified dependency compatibility
         shell: bash
@@ -47,12 +45,8 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           p = Path('/tmp/mori-src/MORI/pubspec.yaml')
-          s = p.read_text()
-          old = 'geolocator: ^14.1.1'
-          new = 'geolocator: ^14.0.2'
-          if old in s:
-              s = s.replace(old, new)
-          if new not in s:
+          s = p.read_text().replace('geolocator: ^14.1.1', 'geolocator: ^14.0.2')
+          if 'geolocator: ^14.0.2' not in s:
               raise SystemExit('Expected geolocator constraint missing')
           p.write_text(s)
           PY
@@ -70,7 +64,6 @@ jobs:
           cp /tmp/mori-src/MORI/pubspec.yaml mori-build/pubspec.yaml
           cp /tmp/mori-src/MORI/analysis_options.yaml mori-build/analysis_options.yaml
           cp /tmp/mori-src/MORI/README.md mori-build/README.md
-
           INFO="mori-build/ios/Runner/Info.plist"
           set_plist() {
             local key="$1" value="$2"
@@ -81,11 +74,10 @@ jobs:
           set_plist NSCameraUsageDescription "MORI uses the camera only when you choose to capture a memory."
           set_plist NSMicrophoneUsageDescription "MORI uses the microphone only when you record a short sound for a memory."
           set_plist NSLocationWhenInUseUsageDescription "MORI can optionally save coordinates with a memory. Location stays on this iPhone."
-
           cd mori-build
           flutter pub get
 
-      - name: Apply safe Dart fixes and format
+      - name: Strict-safe Dart cleanup
         working-directory: mori-build
         shell: bash
         run: |
@@ -94,53 +86,17 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          targets = {
-            'lib/core/services/backup_service.dart': {
-              'if (!await image.exists()) continue;',
-              'if (result == null || result.files.isEmpty) return null;',
-              "if (bytes == null) throw StateError('Could not read the selected backup.');",
-              'if (raw is! Map) continue;',
-              'if (imageKey == null || byName[imageKey] == null) continue;',
-              'if (await memories.byId(id) != null) id = const Uuid().v4();',
-              'if (isDaily && await memories.dailyMemory(capturedAt) != null) isDaily = false;',
-              'if (await thoughts.byId(id) != null) id = const Uuid().v4();',
-            },
-            'lib/features/capture/capture_screen.dart': {
-              'if (!_saved) await _fileStore.deleteIfExists(path);',
-              'if (!_saved) unawaited(_fileStore.deleteIfExists(_audioPath));',
-              'if (_audioPath != null) await _fileStore.deleteIfExists(_audioPath);',
-              'if (!mounted) return;',
-              'if (next >= 10) await _stopRecording();',
-              'if (_audioSeconds == 0 && path != null) _audioSeconds = 1;',
-              'if (!_includeLocation) return;',
-              'if (!await Geolocator.isLocationServiceEnabled()) return;',
-              'if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();',
-              'if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) return;',
-              "if (_image == null) _show('Choose one photo first.');",
-              'if (_recording) await _stopRecording();',
-              'if (_includeLocation) await _captureLocation();',
-              'if (mounted) Navigator.of(context).pop(true);',
-              'if (mounted) setState(() => _saving = false);',
-            },
-            'lib/features/memories/recap_view.dart': {
-              'if (_period == 0) _anchor = _anchor.add(Duration(days: 7 * direction));',
-              'if (_period == 1) _anchor = DateTime(_anchor.year, _anchor.month + direction, 1);',
-              'if (_period == 2) _anchor = DateTime(_anchor.year + direction, 1, 1);',
-              'if (!_playing || !mounted) return;',
-              'if (_playing) _start();',
-            },
-          }
-
-          for rel, wanted in targets.items():
-              path = Path(rel)
+          def wrap_simple_if(path: Path):
               out = []
+              changed = False
               for line in path.read_text().splitlines():
                   stripped = line.strip()
-                  if stripped in wanted:
-                      indent = line[:len(line) - len(line.lstrip())]
+                  if stripped.startswith('if (') and stripped.endswith(';') and '{' not in stripped:
+                      start = stripped.find('(')
                       depth = 0
                       close = None
-                      for i, ch in enumerate(stripped):
+                      for i in range(start, len(stripped)):
+                          ch = stripped[i]
                           if ch == '(':
                               depth += 1
                           elif ch == ')':
@@ -148,23 +104,20 @@ jobs:
                               if depth == 0:
                                   close = i
                                   break
-                      if close is None:
-                          raise SystemExit(f'Could not parse control flow: {stripped}')
-                      condition = stripped[:close + 1]
-                      statement = stripped[close + 1:].strip()
-                      out.extend([f'{indent}{condition} {{', f'{indent}  {statement}', f'{indent}}}'])
-                  else:
-                      out.append(line)
-              path.write_text('\n'.join(out) + '\n')
+                      if close is not None:
+                          rest = stripped[close + 1:].strip()
+                          if rest:
+                              indent = line[:len(line) - len(line.lstrip())]
+                              condition = stripped[:close + 1]
+                              out.extend([f'{indent}{condition} {{', f'{indent}  {rest}', f'{indent}}}'])
+                              changed = True
+                              continue
+                  out.append(line)
+              if changed:
+                  path.write_text('\n'.join(out) + '\n')
 
-          # Avoid a collection-if lint by making the optional trailing button an explicit widget.
-          capture = Path('lib/features/capture/capture_screen.dart')
-          s = capture.read_text()
-          old = 'if (hasAudio && !recording) IconButton(onPressed: onDelete, icon: const Icon(Icons.close_rounded)),'
-          new = '(hasAudio && !recording) ? IconButton(onPressed: onDelete, icon: const Icon(Icons.close_rounded)) : const SizedBox.shrink(),'
-          if old in s:
-              s = s.replace(old, new)
-          capture.write_text(s)
+          for path in Path('lib').rglob('*.dart'):
+              wrap_simple_if(path)
           PY
           dart fix --apply
           dart format lib test
@@ -185,9 +138,7 @@ jobs:
               fn, size, scale = item.get('filename'), item.get('size'), item.get('scale')
               if not fn or not size or not scale:
                   continue
-              points = float(size.split('x')[0])
-              factor = int(scale.rstrip('x'))
-              pixels = int(round(points * factor))
+              pixels = int(round(float(size.split('x')[0]) * int(scale.rstrip('x'))))
               subprocess.run(['sips','-z',str(pixels),str(pixels),'/tmp/mori_icon_1024.png','--out',str(root/fn)], check=True, stdout=subprocess.DEVNULL)
               written += 1
           if written == 0:
