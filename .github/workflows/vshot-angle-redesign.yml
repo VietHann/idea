@@ -1,0 +1,95 @@
+name: Build VShot 0.2 IPA
+
+on:
+  push:
+    branches: [vshot-angle-redesign]
+    paths:
+      - 'vshot-redesign/**'
+      - '.github/workflows/vshot-angle-redesign.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vshot-angle-redesign-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build unsigned VShot 0.2 IPA
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Reconstruct VShot source
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/vshot-src /tmp/vshot.tar.gz /tmp/vshot.b64
+          mkdir -p /tmp/vshot-src
+          python3 - <<'PY'
+          import base64, hashlib, pathlib
+          parts = sorted(pathlib.Path('vshot-redesign/chunks').glob('part*'))
+          assert len(parts) == 6, f'Expected 6 chunks, got {len(parts)}'
+          encoded = ''.join(p.read_text().strip() for p in parts)
+          data = base64.b64decode(encoded)
+          digest = hashlib.sha256(data).hexdigest()
+          expected = 'bf94689b5535af4460e4e5d80283619d4a37cebe847003773e1f1901d85881e1'
+          print('source sha256:', digest)
+          assert digest == expected, f'Source archive hash mismatch: {digest}'
+          pathlib.Path('/tmp/vshot.tar.gz').write_bytes(data)
+          PY
+          tar -xzf /tmp/vshot.tar.gz -C /tmp/vshot-src
+          test -f /tmp/vshot-src/VShot/project.yml
+          test -f /tmp/vshot-src/VShot/Sources/Features/VShotCameraView.swift
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: /tmp/vshot-src/VShot
+        run: xcodegen generate
+
+      - name: Build VShot for iPhone
+        working-directory: /tmp/vshot-src/VShot
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project VShot.xcodeproj \
+            -scheme VShot \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            clean build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Package IPA
+        working-directory: /tmp/vshot-src/VShot
+        run: |
+          set -euo pipefail
+          APP_PATH=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name 'VShot.app' | head -1)
+          test -n "$APP_PATH"
+          file "$APP_PATH/VShot"
+          rm -rf Payload dist
+          mkdir -p Payload dist
+          cp -R "$APP_PATH" Payload/
+          zip -qq -r dist/VShot-0.2.0-unsigned.ipa Payload
+          ls -lh dist/VShot-0.2.0-unsigned.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VShot-0.2.0-IPA
+          path: /tmp/vshot-src/VShot/dist/VShot-0.2.0-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 30
