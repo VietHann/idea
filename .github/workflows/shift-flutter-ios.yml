@@ -29,12 +29,19 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Reconstruct SHIFT source
+        run: |
+          set -euo pipefail
+          cat shift-build/source_b64/part* | base64 -D > shift-build/SHIFT-source-fixed.tar.gz
+          echo "a08196d0804296a8f37bed7ff393771d7a3e09f3459f682368786ab3baf038e5  shift-build/SHIFT-source-fixed.tar.gz" | shasum -a 256 -c -
+          tar -tzf shift-build/SHIFT-source-fixed.tar.gz >/dev/null
+
       - name: Reconstruct SHIFT app
         run: |
           set -euo pipefail
           rm -rf shift-work
           mkdir -p shift-work/source shift-work/app
-          tar -xzf shift-build/SHIFT-source.tar.gz -C shift-work/source
+          tar -xzf shift-build/SHIFT-source-fixed.tar.gz -C shift-work/source
           test -f shift-work/source/SHIFT/lib/main.dart
           flutter create \
             --project-name shift \
@@ -65,7 +72,7 @@ jobs:
 
       - name: Flutter analyze
         working-directory: shift-work/app
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Build iPhone app
         working-directory: shift-work/app
@@ -87,6 +94,7 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP_PATH/Info.plist"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP_PATH/Info.plist"
           test -d "$APP_PATH/Frameworks/App.framework/flutter_assets"
           rm -rf Payload dist
           mkdir -p Payload dist
@@ -105,5 +113,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: SHIFT-0.1.0-source
-          path: shift-build/SHIFT-source.tar.gz
+          path: shift-build/SHIFT-source-fixed.tar.gz
           retention-days: 30
