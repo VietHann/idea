@@ -87,8 +87,77 @@ jobs:
 
       - name: Apply safe Dart fixes and format
         working-directory: mori-build
+        shell: bash
         run: |
+          set -euo pipefail
           dart fix --apply
+          python3 - <<'PY'
+          from pathlib import Path
+
+          targets = {
+            'lib/core/services/backup_service.dart': {
+              'if (!await image.exists()) continue;',
+              'if (result == null || result.files.isEmpty) return null;',
+              "if (bytes == null) throw StateError('Could not read the selected backup.');",
+              'if (raw is! Map) continue;',
+              'if (imageKey == null || byName[imageKey] == null) continue;',
+              'if (await memories.byId(id) != null) id = const Uuid().v4();',
+              'if (isDaily && await memories.dailyMemory(capturedAt) != null) isDaily = false;',
+              'if (await thoughts.byId(id) != null) id = const Uuid().v4();',
+            },
+            'lib/features/capture/capture_screen.dart': {
+              'if (!_saved) await _fileStore.deleteIfExists(path);',
+              'if (!_saved) unawaited(_fileStore.deleteIfExists(_audioPath));',
+              'if (_audioPath != null) await _fileStore.deleteIfExists(_audioPath);',
+              'if (!mounted) return;',
+              'if (next >= 10) await _stopRecording();',
+              'if (_audioSeconds == 0 && path != null) _audioSeconds = 1;',
+              'if (!_includeLocation) return;',
+              'if (!await Geolocator.isLocationServiceEnabled()) return;',
+              'if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();',
+              'if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) return;',
+              "if (_image == null) _show('Choose one photo first.');",
+              'if (_recording) await _stopRecording();',
+              'if (_includeLocation) await _captureLocation();',
+              'if (mounted) Navigator.of(context).pop(true);',
+              'if (mounted) setState(() => _saving = false);',
+            },
+            'lib/features/memories/recap_view.dart': {
+              'if (_period == 0) _anchor = _anchor.add(Duration(days: 7 * direction));',
+              'if (_period == 1) _anchor = DateTime(_anchor.year, _anchor.month + direction, 1);',
+              'if (_period == 2) _anchor = DateTime(_anchor.year + direction, 1, 1);',
+              'if (!_playing || !mounted) return;',
+              'if (_playing) _start();',
+            },
+          }
+
+          for rel, wanted in targets.items():
+              path = Path(rel)
+              out = []
+              for line in path.read_text().splitlines():
+                  stripped = line.strip()
+                  if stripped in wanted:
+                      indent = line[:len(line) - len(line.lstrip())]
+                      # Split single-line `if (condition) statement;` at the matching closing parenthesis.
+                      depth = 0
+                      close = None
+                      for i, ch in enumerate(stripped):
+                          if ch == '(':
+                              depth += 1
+                          elif ch == ')':
+                              depth -= 1
+                              if depth == 0:
+                                  close = i
+                                  break
+                      if close is None:
+                          raise SystemExit(f'Could not parse control flow: {stripped}')
+                      condition = stripped[:close + 1]
+                      statement = stripped[close + 1:].strip()
+                      out.extend([f'{indent}{condition} {{', f'{indent}  {statement}', f'{indent}}}'])
+                  else:
+                      out.append(line)
+              path.write_text('\n'.join(out) + '\n')
+          PY
           dart fix --apply
           dart format lib test
 
