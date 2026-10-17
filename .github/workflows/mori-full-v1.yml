@@ -138,7 +138,6 @@ jobs:
                   stripped = line.strip()
                   if stripped in wanted:
                       indent = line[:len(line) - len(line.lstrip())]
-                      # Split single-line `if (condition) statement;` at the matching closing parenthesis.
                       depth = 0
                       close = None
                       for i, ch in enumerate(stripped):
@@ -157,6 +156,15 @@ jobs:
                   else:
                       out.append(line)
               path.write_text('\n'.join(out) + '\n')
+
+          # Avoid a collection-if lint by making the optional trailing button an explicit widget.
+          capture = Path('lib/features/capture/capture_screen.dart')
+          s = capture.read_text()
+          old = 'if (hasAudio && !recording) IconButton(onPressed: onDelete, icon: const Icon(Icons.close_rounded)),'
+          new = '(hasAudio && !recording) ? IconButton(onPressed: onDelete, icon: const Icon(Icons.close_rounded)) : const SizedBox.shrink(),'
+          if old in s:
+              s = s.replace(old, new)
+          capture.write_text(s)
           PY
           dart fix --apply
           dart format lib test
