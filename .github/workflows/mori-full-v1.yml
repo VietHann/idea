@@ -85,9 +85,12 @@ jobs:
           cd mori-build
           flutter pub get
 
-      - name: Format source
+      - name: Apply safe Dart fixes and format
         working-directory: mori-build
-        run: dart format lib test
+        run: |
+          dart fix --apply
+          dart fix --apply
+          dart format lib test
 
       - name: Generate MORI app icon
         shell: bash
