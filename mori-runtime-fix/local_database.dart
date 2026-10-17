@@ -73,6 +73,7 @@ class LocalDatabase {
     await _ensureMemoryColumns(db);
     await _createIndexes(db);
     await _createThoughts(db);
+    await _ensureThoughtColumns(db);
     await _createMeta(db);
   }
 
@@ -84,6 +85,12 @@ class LocalDatabase {
   static Future<void> _ensureMemoryColumns(Database db) async {
     final columns = await _columns(db, 'memories');
     final additions = <String, String>{
+      'created_at': 'INTEGER NOT NULL DEFAULT 0',
+      'captured_at': 'INTEGER NOT NULL DEFAULT 0',
+      'day_key': "TEXT NOT NULL DEFAULT ''",
+      'caption': "TEXT NOT NULL DEFAULT ''",
+      'mood': "TEXT NOT NULL DEFAULT 'calm'",
+      'image_path': "TEXT NOT NULL DEFAULT ''",
       'place_name': 'TEXT',
       'audio_path': 'TEXT',
       'audio_duration_ms': 'INTEGER NOT NULL DEFAULT 0',
@@ -132,6 +139,28 @@ class LocalDatabase {
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_thoughts_cluster ON thoughts(cluster)',
     );
+  }
+
+  static Future<void> _ensureThoughtColumns(Database db) async {
+    final columns = await _columns(db, 'thoughts');
+    final additions = <String, String>{
+      'created_at': 'INTEGER NOT NULL DEFAULT 0',
+      'updated_at': 'INTEGER NOT NULL DEFAULT 0',
+      'title': "TEXT NOT NULL DEFAULT ''",
+      'body': "TEXT NOT NULL DEFAULT ''",
+      'cluster': "TEXT NOT NULL DEFAULT 'Life'",
+      'color_key': "TEXT NOT NULL DEFAULT 'blush'",
+      'related_memory_id': 'TEXT',
+      'is_pinned': 'INTEGER NOT NULL DEFAULT 0',
+    };
+
+    for (final entry in additions.entries) {
+      if (!columns.contains(entry.key)) {
+        await db.execute(
+          'ALTER TABLE thoughts ADD COLUMN ${entry.key} ${entry.value}',
+        );
+      }
+    }
   }
 
   static Future<void> _createMeta(Database db) async {
