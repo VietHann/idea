@@ -1,0 +1,64 @@
+name: VShot
+
+options:
+  bundleIdPrefix: app.vshot
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CODE_SIGNING_REQUIRED: "NO"
+    CODE_SIGNING_ALLOWED: "NO"
+    CODE_SIGN_IDENTITY: ""
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  VShot:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.vshot.ios
+        GENERATE_INFOPLIST_FILE: "YES"
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        INFOPLIST_KEY_CFBundleDisplayName: "VShot"
+        INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait"
+        INFOPLIST_KEY_NSCameraUsageDescription: "VShot uses your camera to guide poses, framing, and capture photos on-device."
+        INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "VShot can save your finished photos to your library."
+
+  VShotTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: VShot
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.vshot.ios.tests
+        GENERATE_INFOPLIST_FILE: "YES"
+
+schemes:
+  VShot:
+    build:
+      targets:
+        VShot: all
+        VShotTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - VShotTests
+    archive:
+      config: Release
