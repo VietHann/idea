@@ -1,0 +1,95 @@
+import SpriteKit
+import UIKit
+
+final class BlobCityScene: SKScene {
+    private let world = SKNode()
+    private let cameraNode = SKCameraNode()
+    private let player = SKSpriteNode(imageNamed: "blob_base")
+    private let worldSize = CGSize(width: 3200, height: 3200)
+
+    private var entities: [SKSpriteNode] = []
+    private var npcNodes: [SKSpriteNode] = []
+    private var taxVan: SKSpriteNode?
+
+    private var playerMass: CGFloat = 1.0
+    private var score = 0
+    private var chaos: CGFloat = 0
+    private var combo = 0
+    private var comboTimer: TimeInterval = 0
+    private var activeMutation: Mutation?
+    private var mutationTimer: TimeInterval = 0
+    private var eventTimer: TimeInterval = 14
+    private var elapsed: TimeInterval = 0
+    private var lastUpdate: TimeInterval = 0
+    private var consumedCount = 0
+    private var gameEnded = false
+
+    private var moveVector = CGVector.zero
+    private var joystickTouch: UITouch?
+    private var joystickStart = CGPoint.zero
+    private let joystickBase = SKShapeNode(circleOfRadius: 42)
+    private let joystickKnob = SKShapeNode(circleOfRadius: 18)
+
+    private let scoreLabel = SKLabelNode(fontNamed: "AvenirNext-Heavy")
+    private let sizeLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
+    private let chaosLabel = SKLabelNode(fontNamed: "AvenirNext-Heavy")
+    private let chaosTrack = SKShapeNode(rectOf: CGSize(width: 154, height: 12), cornerRadius: 6)
+    private let chaosFill = SKShapeNode(rectOf: CGSize(width: 150, height: 8), cornerRadius: 4)
+    private let mutationLabel = SKLabelNode(fontNamed: "AvenirNext-Heavy")
+    private let goalLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
+
+    private var musicNode: SKAudioNode?
+
+    override func didMove(to view: SKView) {
+        backgroundColor = UIColor(red: 0.91, green: 0.93, blue: 0.88, alpha: 1)
+        anchorPoint = CGPoint(x: 0.5, y: 0.5)
+        addChild(world)
+        setupWorld()
+        setupPlayer()
+        setupCamera()
+        setupHUD()
+        spawnCity()
+        startMusic()
+        showBanner(title: "SMALL BLOB", subtitle: "huge legal consequences", accent: .systemGreen)
+    }
+
+    private func setupWorld() {
+        let bg = SKShapeNode(rectOf: worldSize, cornerRadius: 0)
+        bg.fillColor = UIColor(red: 0.92, green: 0.94, blue: 0.89, alpha: 1)
+        bg.strokeColor = .clear
+        bg.zPosition = -100
+        world.addChild(bg)
+
+        // Roads
+        for x in stride(from: -1200, through: 1200, by: 600) {
+            let road = SKShapeNode(rectOf: CGSize(width: 180, height: worldSize.height), cornerRadius: 38)
+            road.fillColor = UIColor(red: 0.32, green: 0.33, blue: 0.38, alpha: 1)
+            road.strokeColor = UIColor.white.withAlphaComponent(0.10)
+            road.lineWidth = 3
+            road.position = CGPoint(x: x, y: 0)
+            road.zPosition = -70
+            world.addChild(road)
+
+            let dash = SKShapeNode(rectOf: CGSize(width: 8, height: worldSize.height - 60))
+            dash.fillColor = UIColor.white.withAlphaComponent(0.10)
+            dash.strokeColor = .clear
+            dash.position = CGPoint(x: x, y: 0)
+            dash.zPosition = -69
+            world.addChild(dash)
+        }
+        for y in stride(from: -1200, through: 1200, by: 600) {
+            let road = SKShapeNode(rectOf: CGSize(width: worldSize.width, height: 180), cornerRadius: 38)
+            road.fillColor = UIColor(red: 0.32, green: 0.33, blue: 0.38, alpha: 1)
+            road.strokeColor = UIColor.white.withAlphaComponent(0.10)
+            road.lineWidth = 3
+            road.position = CGPoint(x: 0, y: y)
+            road.zPosition = -70
+            world.addChild(road)
+        }
+
+        // Parks / plaza
+        for pos in [CGPoint(x:-900,y:900), CGPoint(x:900,y:-900), CGPoint(x:900,y:900)] {
+            let park = SKShapeNode(rectOf: CGSize(width: 390, height: 390), cornerRadius: 74)
+            park.fillColor = UIColor(red: 0.69, green: 0.86, blue: 0.61, alpha: 1)
+            park.strokeColor = UIColor.white.withAlphaComponent(0.2)
+            park.lineWidth = 4
