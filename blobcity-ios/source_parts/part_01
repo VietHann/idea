@@ -1,0 +1,95 @@
+            park.position = pos
+            park.zPosition = -75
+            world.addChild(park)
+        }
+    }
+
+    private func setupPlayer() {
+        player.size = CGSize(width: 92, height: 92)
+        player.position = .zero
+        player.zPosition = 50
+        player.name = "player"
+        world.addChild(player)
+        let wobble = SKAction.sequence([
+            .scaleX(to: 1.04, duration: 0.38),
+            .group([.scaleX(to: 0.97, duration: 0.38), .scaleY(to: 1.035, duration: 0.38)])
+        ])
+        player.run(.repeatForever(wobble), withKey: "wobble")
+    }
+
+    private func setupCamera() {
+        camera = cameraNode
+        addChild(cameraNode)
+        cameraNode.position = player.position
+    }
+
+    private func setupHUD() {
+        scoreLabel.fontSize = 22
+        scoreLabel.horizontalAlignmentMode = .left
+        scoreLabel.position = CGPoint(x: -190, y: 395)
+        scoreLabel.zPosition = 500
+        cameraNode.addChild(scoreLabel)
+
+        sizeLabel.fontSize = 13
+        sizeLabel.fontColor = .white.withAlphaComponent(0.72)
+        sizeLabel.horizontalAlignmentMode = .left
+        sizeLabel.position = CGPoint(x: -190, y: 372)
+        sizeLabel.zPosition = 500
+        cameraNode.addChild(sizeLabel)
+
+        chaosLabel.fontSize = 11
+        chaosLabel.text = "CHAOS"
+        chaosLabel.horizontalAlignmentMode = .left
+        chaosLabel.position = CGPoint(x: -190, y: 340)
+        chaosLabel.zPosition = 500
+        cameraNode.addChild(chaosLabel)
+
+        chaosTrack.fillColor = UIColor.black.withAlphaComponent(0.30)
+        chaosTrack.strokeColor = UIColor.white.withAlphaComponent(0.08)
+        chaosTrack.position = CGPoint(x: -75, y: 344)
+        chaosTrack.zPosition = 500
+        cameraNode.addChild(chaosTrack)
+
+        chaosFill.fillColor = UIColor(red: 1.0, green: 0.42, blue: 0.61, alpha: 1)
+        chaosFill.strokeColor = .clear
+        chaosFill.position = CGPoint(x: -77, y: 344)
+        chaosFill.xScale = 0.01
+        chaosFill.zPosition = 501
+        chaosFill.anchorPointHack(x: 0)
+        cameraNode.addChild(chaosFill)
+
+        mutationLabel.fontSize = 14
+        mutationLabel.fontColor = UIColor(red: 0.72, green: 1.0, blue: 0.45, alpha: 1)
+        mutationLabel.position = CGPoint(x: 0, y: -365)
+        mutationLabel.zPosition = 500
+        cameraNode.addChild(mutationLabel)
+
+        goalLabel.fontSize = 12
+        goalLabel.fontColor = .white.withAlphaComponent(0.60)
+        goalLabel.position = CGPoint(x: 0, y: -393)
+        goalLabel.zPosition = 500
+        cameraNode.addChild(goalLabel)
+
+        joystickBase.fillColor = UIColor.white.withAlphaComponent(0.08)
+        joystickBase.strokeColor = UIColor.white.withAlphaComponent(0.10)
+        joystickBase.lineWidth = 2
+        joystickBase.isHidden = true
+        joystickBase.zPosition = 600
+        cameraNode.addChild(joystickBase)
+
+        joystickKnob.fillColor = UIColor(red: 0.68, green: 0.95, blue: 0.42, alpha: 0.78)
+        joystickKnob.strokeColor = UIColor.white.withAlphaComponent(0.30)
+        joystickKnob.lineWidth = 2
+        joystickKnob.isHidden = true
+        joystickKnob.zPosition = 601
+        cameraNode.addChild(joystickKnob)
+
+        updateHUD()
+    }
+
+    private func spawnCity() {
+        let specs: [EntitySpec] = [
+            .init(texture:"soda", mass:0.35, points:12, display:"SODA", mutation:nil, isNPC:false, baseSize:48),
+            .init(texture:"boba", mass:0.45, points:16, display:"BOBA", mutation:nil, isNPC:false, baseSize:52),
+            .init(texture:"bread", mass:0.5, points:18, display:"BREAD", mutation:nil, isNPC:false, baseSize:52),
+            .init(texture:"coffee", mass:0.55, points:20, display:"COFFEE", mutation:nil, isNPC:false, baseSize:52),
