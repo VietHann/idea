@@ -1,0 +1,95 @@
+
+    private func updateHUD() {
+        scoreLabel.text = "\(score)"
+        sizeLabel.text = String(format: "MASS %.1f   •   %d things eaten", playerMass, consumedCount)
+        let chaosName: String
+        switch chaos {
+        case ..<25: chaosName = "NORMAL"
+        case ..<50: chaosName = "SUS"
+        case ..<75: chaosName = "UNHINGED"
+        default: chaosName = "BRAINROT"
+        }
+        chaosLabel.text = "CHAOS  \(chaosName)"
+        chaosFill.xScale = max(0.01, chaos / 100.0)
+        goalLabel.text = playerMass < 55 ? "goal: get MASS 55 and eat CITY HALL" : "CITY HALL IS EDIBLE. oh no."
+        if playerMass >= 55 {
+            entities.first(where: { $0.name == "cityHall" })?.childNode(withName: "lockBadge")?.removeFromParent()
+        }
+    }
+
+    private func popText(_ text: String, at point: CGPoint, color: UIColor, big: Bool) {
+        let l = SKLabelNode(fontNamed: "AvenirNext-Heavy")
+        l.text = text
+        l.fontSize = big ? 22 : 15
+        l.fontColor = color
+        l.position = point
+        l.zPosition = 120
+        world.addChild(l)
+        l.run(.sequence([
+            .group([.moveBy(x: 0, y: 72, duration: 0.65), .fadeOut(withDuration: 0.65), .scale(to: big ? 1.18 : 1.0, duration: 0.22)]),
+            .removeFromParent()
+        ]))
+    }
+
+    private func particleBurst(at point: CGPoint, color: UIColor) {
+        for i in 0..<9 {
+            let dot = SKShapeNode(circleOfRadius: CGFloat.random(in: 3...7))
+            dot.fillColor = color
+            dot.strokeColor = .clear
+            dot.position = point
+            dot.zPosition = 100
+            world.addChild(dot)
+            let a = CGFloat(i) / 9 * .pi * 2 + CGFloat.random(in: -0.2...0.2)
+            let r = CGFloat.random(in: 50...95)
+            dot.run(.sequence([
+                .group([.moveBy(x: cos(a)*r, y: sin(a)*r, duration: 0.34), .fadeOut(withDuration: 0.34), .scale(to: 0.2, duration: 0.34)]),
+                .removeFromParent()
+            ]))
+        }
+    }
+
+    private func confetti() {
+        for _ in 0..<34 {
+            let piece = SKShapeNode(rectOf: CGSize(width: CGFloat.random(in: 5...10), height: CGFloat.random(in: 10...18)), cornerRadius: 3)
+            let colors: [UIColor] = [.systemPink, .systemYellow, .systemMint, .systemCyan, UIColor(red:0.72, green:1.0, blue:0.45, alpha:1)]
+            piece.fillColor = colors.randomElement()!
+            piece.strokeColor = .clear
+            piece.position = CGPoint(x: CGFloat.random(in: -210...210), y: 470)
+            piece.zPosition = 1000
+            cameraNode.addChild(piece)
+            piece.run(.sequence([
+                .group([.moveBy(x: CGFloat.random(in: -80...80), y: -900, duration: Double.random(in: 1.6...2.6)), .rotate(byAngle: CGFloat.random(in: -8...8), duration: 2.1)]),
+                .removeFromParent()
+            ]))
+        }
+    }
+
+    private func showBanner(title: String, subtitle: String, accent: UIColor) {
+        cameraNode.childNode(withName: "eventBanner")?.removeFromParent()
+        let container = SKNode()
+        container.name = "eventBanner"
+        container.position = CGPoint(x: 0, y: 250)
+        container.zPosition = 800
+        container.alpha = 0
+        container.setScale(0.88)
+        cameraNode.addChild(container)
+
+        let card = SKShapeNode(rectOf: CGSize(width: 330, height: 94), cornerRadius: 28)
+        card.fillColor = UIColor(red: 0.10, green: 0.08, blue: 0.14, alpha: 0.92)
+        card.strokeColor = accent.withAlphaComponent(0.38)
+        card.lineWidth = 2
+        container.addChild(card)
+
+        let t = SKLabelNode(fontNamed: "AvenirNext-Heavy")
+        t.text = title
+        t.fontSize = 18
+        t.fontColor = accent
+        t.position = CGPoint(x: 0, y: 14)
+        container.addChild(t)
+
+        let s = SKLabelNode(fontNamed: "AvenirNext-Medium")
+        s.text = subtitle
+        s.fontSize = 12
+        s.fontColor = .white.withAlphaComponent(0.64)
+        s.position = CGPoint(x: 0, y: -15)
+        container.addChild(s)
