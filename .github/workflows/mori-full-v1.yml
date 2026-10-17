@@ -85,67 +85,70 @@ jobs:
           dart fix --apply
           python3 - <<'PY'
           from pathlib import Path
-          import re
 
-          def wrap_simple_if(path: Path):
+          def wrap_if_bodies(path: Path):
+              lines = path.read_text().splitlines()
               out = []
+              i = 0
               changed = False
-              for line in path.read_text().splitlines():
+              while i < len(lines):
+                  line = lines[i]
                   stripped = line.strip()
-                  if stripped.startswith('if (') and stripped.endswith(';') and '{' not in stripped:
+                  indent = line[:len(line) - len(line.lstrip())]
+
+                  # Case 1: `if (condition) statement;` on one physical line.
+                  if stripped.startswith('if (') and '{' not in stripped and stripped.endswith(';'):
                       start = stripped.find('(')
                       depth = 0
                       close = None
-                      for i in range(start, len(stripped)):
-                          ch = stripped[i]
-                          if ch == '(':
+                      for j in range(start, len(stripped)):
+                          if stripped[j] == '(':
                               depth += 1
-                          elif ch == ')':
+                          elif stripped[j] == ')':
                               depth -= 1
                               if depth == 0:
-                                  close = i
+                                  close = j
                                   break
                       if close is not None:
                           rest = stripped[close + 1:].strip()
                           if rest:
-                              indent = line[:len(line) - len(line.lstrip())]
-                              condition = stripped[:close + 1]
-                              out.extend([f'{indent}{condition} {{', f'{indent}  {rest}', f'{indent}}}'])
+                              out.extend([f'{indent}{stripped[:close + 1]} {{', f'{indent}  {rest}', f'{indent}}}'])
                               changed = True
+                              i += 1
                               continue
+
+                  # Case 2: `if (condition)` then exactly one indented statement.
+                  # This is the strict-lint shape remaining in capture_screen.dart.
+                  if (
+                      stripped.startswith('if (')
+                      and stripped.endswith(')')
+                      and '{' not in stripped
+                      and i + 1 < len(lines)
+                  ):
+                      next_line = lines[i + 1]
+                      next_stripped = next_line.strip()
+                      next_indent = next_line[:len(next_line) - len(next_line.lstrip())]
+                      if (
+                          len(next_indent) > len(indent)
+                          and next_stripped
+                          and not next_stripped.startswith(('{', 'else', 'if '))
+                          and (next_stripped.endswith(';') or next_stripped.endswith(');'))
+                      ):
+                          out.append(f'{indent}{stripped} {{')
+                          out.append(next_line)
+                          out.append(f'{indent}}}')
+                          changed = True
+                          i += 2
+                          continue
+
                   out.append(line)
+                  i += 1
+
               if changed:
                   path.write_text('\n'.join(out) + '\n')
 
           for path in Path('lib').rglob('*.dart'):
-              wrap_simple_if(path)
-
-          # Flutter's strict lint also flags collection-if without braces. In the
-          # capture audio row this is a widget-list condition, so express it as
-          # a ternary widget instead of a control-flow collection element.
-          capture = Path('lib/features/capture/capture_screen.dart')
-          s = capture.read_text()
-          pattern = re.compile(
-              r'if\s*\(hasAudio\s*&&\s*!recording\)\s*'
-              r'IconButton\(\s*onPressed:\s*onDelete,\s*'
-              r'icon:\s*const\s+Icon\(Icons\.close_rounded\),?\s*\),?',
-              re.S,
-          )
-          replacement = (
-              '(hasAudio && !recording)\n'
-              '    ? IconButton(\n'
-              '        onPressed: onDelete,\n'
-              '        icon: const Icon(Icons.close_rounded),\n'
-              '      )\n'
-              '    : const SizedBox.shrink(),'
-          )
-          s, count = pattern.subn(replacement, s, count=1)
-          if count == 0:
-              # Preserve strictness: fail here rather than silently shipping the
-              # known collection-if lint if source formatting changes.
-              if 'if (hasAudio && !recording)' in s:
-                  raise SystemExit('Audio collection-if exists but targeted rewrite did not match')
-          capture.write_text(s)
+              wrap_if_bodies(path)
           PY
           dart fix --apply
           dart format lib test
