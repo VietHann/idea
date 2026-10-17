@@ -88,6 +88,8 @@ jobs:
           cd mori-build
           dart fix --apply
           dart format lib test
+          dart fix --apply
+          dart format lib test
           rm -rf /tmp/mori-src/MORI/lib /tmp/mori-src/MORI/test
           cp -R lib /tmp/mori-src/MORI/lib
           cp -R test /tmp/mori-src/MORI/test
