@@ -72,21 +72,56 @@ jobs:
           cd mori-build
           flutter pub get
 
-      - name: Clean and show all strict-lint contexts
+      - name: Clean and apply exact strict-lint fixes
         working-directory: mori-build
         shell: bash
         run: |
           set -euo pipefail
           dart fix --apply
           dart format lib test
-          echo '===== backup_service.dart 155-175 ====='
-          nl -ba lib/core/services/backup_service.dart | sed -n '155,175p'
-          echo '===== capture_screen.dart 125-145 ====='
-          nl -ba lib/features/capture/capture_screen.dart | sed -n '125,145p'
-          echo '===== capture_screen.dart 336-354 ====='
-          nl -ba lib/features/capture/capture_screen.dart | sed -n '336,354p'
-          echo '===== recap_view.dart 43-58 ====='
-          nl -ba lib/features/memories/recap_view.dart | sed -n '43,58p'
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          def sub1(path, pattern, replacement):
+              p = Path(path)
+              source = p.read_text()
+              updated, count = re.subn(pattern, replacement, source, count=1, flags=re.S)
+              if count != 1:
+                  raise SystemExit(f'Expected exactly one targeted replacement in {path}, got {count}')
+              p.write_text(updated)
+
+          sub1(
+              'lib/core/services/backup_service.dart',
+              r"      if \(isDaily && await memories\.dailyMemory\(capturedAt\) != null\)\n        isDaily = false;",
+              "      if (isDaily && await memories.dailyMemory(capturedAt) != null) {\n        isDaily = false;\n      }",
+          )
+
+          sub1(
+              'lib/features/capture/capture_screen.dart',
+              r"    if \(permission == LocationPermission\.denied\)\n      permission = await Geolocator\.requestPermission\(\);",
+              "    if (permission == LocationPermission.denied) {\n      permission = await Geolocator.requestPermission();\n    }",
+          )
+
+          sub1(
+              'lib/features/capture/capture_screen.dart',
+              r"    if \(permission == LocationPermission\.denied \|\|\n        permission == LocationPermission\.deniedForever\)\n      return;",
+              "    if (permission == LocationPermission.denied ||\n        permission == LocationPermission.deniedForever) {\n      return;\n    }",
+          )
+
+          sub1(
+              'lib/features/capture/capture_screen.dart',
+              r"                if \(mounted\)\n                  setState\(\(\) \{\n                    _audioPath = null;\n                    _audioSeconds = 0;\n                  \}\);",
+              "                if (mounted) {\n                  setState(() {\n                    _audioPath = null;\n                    _audioSeconds = 0;\n                  });\n                }",
+          )
+
+          sub1(
+              'lib/features/memories/recap_view.dart',
+              r"      if \(_period == 0\) _anchor = _anchor\.add\(Duration\(days: 7 \* direction\)\);\n      if \(_period == 1\)\n        _anchor = DateTime\(_anchor\.year, _anchor\.month \+ direction, 1\);\n      if \(_period == 2\) _anchor = DateTime\(_anchor\.year \+ direction, 1, 1\);",
+              "      if (_period == 0) {\n        _anchor = _anchor.add(Duration(days: 7 * direction));\n      }\n      if (_period == 1) {\n        _anchor = DateTime(_anchor.year, _anchor.month + direction, 1);\n      }\n      if (_period == 2) {\n        _anchor = DateTime(_anchor.year + direction, 1, 1);\n      }",
+          )
+          PY
+          dart format lib test
 
       - name: Generate MORI app icon
         shell: bash
@@ -99,12 +134,16 @@ jobs:
           import json, pathlib, subprocess
           root = pathlib.Path('ios/Runner/Assets.xcassets/AppIcon.appiconset')
           data = json.loads((root/'Contents.json').read_text())
+          written = 0
           for item in data.get('images', []):
               fn, size, scale = item.get('filename'), item.get('size'), item.get('scale')
               if not fn or not size or not scale:
                   continue
               px = int(round(float(size.split('x')[0]) * int(scale.rstrip('x'))))
               subprocess.run(['sips','-z',str(px),str(px),'/tmp/mori_icon_1024.png','--out',str(root/fn)], check=True, stdout=subprocess.DEVNULL)
+              written += 1
+          if written == 0:
+              raise SystemExit('No app icon slots were written')
           PY
 
       - name: Flutter analyze
@@ -145,6 +184,7 @@ jobs:
           cp -R mori-build/build/ios/iphoneos/Runner.app /tmp/mori-ipa/Payload/Runner.app
           cd /tmp/mori-ipa
           zip -qry "$GITHUB_WORKSPACE/MORI-1.0.0-unsigned.ipa" Payload
+          test -s "$GITHUB_WORKSPACE/MORI-1.0.0-unsigned.ipa"
           shasum -a 256 "$GITHUB_WORKSPACE/MORI-1.0.0-unsigned.ipa"
 
       - name: Prepare source artifact
@@ -156,6 +196,7 @@ jobs:
           cp -R mori-build/test /tmp/mori-src/MORI/test
           cp mori-build/pubspec.yaml /tmp/mori-src/MORI/pubspec.yaml
           tar -czf MORI-1.0.0-source.tar.gz -C /tmp/mori-src MORI
+          shasum -a 256 MORI-1.0.0-source.tar.gz
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
