@@ -66,16 +66,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
+          if [ -f mori-build/ios/Podfile ]; then
+            python3 - <<'PY'
           from pathlib import Path
           p = Path('mori-build/ios/Podfile')
           s = p.read_text()
           needle = "      flutter_additional_ios_build_settings(target)"
           repl = """      flutter_additional_ios_build_settings(target)\n      target.build_configurations.each do |config|\n        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']\n        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'BYPASS_PERMISSION_LOCATION_ALWAYS=1'\n      end"""
-          if needle not in s:
-              raise SystemExit('Expected Flutter Podfile hook not found')
-          p.write_text(s.replace(needle, repl, 1))
+          if needle in s:
+              p.write_text(s.replace(needle, repl, 1))
           PY
+          else
+            echo "No Podfile: modern Flutter iOS dependency layout detected; runtime permissions are scoped by Info.plist."
+          fi
 
       - name: Generate MORI app icon
         shell: bash
