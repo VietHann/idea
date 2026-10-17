@@ -1,0 +1,122 @@
+name: Build SHIFT 0.2 Flutter IPA
+
+on:
+  push:
+    branches: [shift-flutter-v02]
+    paths:
+      - 'shift-v2-pack/**'
+      - '.github/workflows/shift-flutter-v02.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shift-flutter-v02-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Reconstruct verified SHIFT 0.2 source
+        run: |
+          set -euo pipefail
+          rm -rf shift-v2-src shift-work
+          mkdir -p shift-v2-src
+          cat shift-v2-pack/part* | base64 -D > /tmp/SHIFT-v0.2.0-source.tar.gz
+          echo "b09dd831575be34d6e0c6addc8bb00431c96c9edb40706905ddb45b57dca231e  /tmp/SHIFT-v0.2.0-source.tar.gz" | shasum -a 256 -c -
+          tar -tzf /tmp/SHIFT-v0.2.0-source.tar.gz >/dev/null
+          tar -xzf /tmp/SHIFT-v0.2.0-source.tar.gz -C shift-v2-src
+          test -f shift-v2-src/SHIFT/lib/main.dart
+          test -f shift-v2-src/SHIFT/ios_custom/AppDelegate.swift
+
+      - name: Create iOS Flutter project
+        run: |
+          set -euo pipefail
+          flutter create \
+            --project-name shift \
+            --org app.viethannn \
+            --platforms=ios \
+            shift-work
+
+          rm -rf shift-work/lib shift-work/test
+          cp -R shift-v2-src/SHIFT/lib shift-work/lib
+          cp shift-v2-src/SHIFT/ios_custom/AppDelegate.swift shift-work/ios/Runner/AppDelegate.swift
+          cp shift-v2-src/SHIFT/ios_custom/PrivacyInfo.xcprivacy shift-work/ios/Runner/PrivacyInfo.xcprivacy
+
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName SHIFT" shift-work/ios/Runner/Info.plist || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string SHIFT" shift-work/ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryAddUsageDescription string SHIFT saves your finished photos and motion loops to Photos." shift-work/ios/Runner/Info.plist || true
+
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*;/IPHONEOS_DEPLOYMENT_TARGET = 17.0;/g' shift-work/ios/Runner.xcodeproj/project.pbxproj
+
+      - name: Generate redesigned app icon
+        run: |
+          set -euo pipefail
+          python3 -m venv .iconvenv
+          source .iconvenv/bin/activate
+          python3 -m pip install --quiet pillow
+          python3 shift-v2-src/SHIFT/scripts/make_icon.py /tmp/AppIcon-1024.png
+          test -f /tmp/AppIcon-1024.png
+          ICON_DIR="shift-work/ios/Runner/Assets.xcassets/AppIcon.appiconset"
+          for icon in "$ICON_DIR"/*.png; do
+            dim=$(sips -g pixelWidth "$icon" | awk '/pixelWidth/ {print $2}')
+            sips -z "$dim" "$dim" /tmp/AppIcon-1024.png --out "$icon" >/dev/null
+          done
+
+      - name: Flutter analyze
+        working-directory: shift-work
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Build iPhone app
+        working-directory: shift-work
+        run: |
+          set -euo pipefail
+          flutter build ios \
+            --release \
+            --no-codesign \
+            --build-name=0.2.0 \
+            --build-number=2
+
+      - name: Package unsigned IPA
+        working-directory: shift-work
+        run: |
+          set -euo pipefail
+          APP_PATH="build/ios/iphoneos/Runner.app"
+          test -d "$APP_PATH"
+          file "$APP_PATH/Runner"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist"
+          test -d "$APP_PATH/Frameworks/App.framework/flutter_assets"
+          rm -rf Payload dist
+          mkdir -p Payload dist
+          cp -R "$APP_PATH" Payload/
+          zip -qq -r dist/SHIFT-0.2.0-unsigned.ipa Payload
+          shasum -a 256 dist/SHIFT-0.2.0-unsigned.ipa
+          ls -lh dist/SHIFT-0.2.0-unsigned.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHIFT-0.2.0-IPA
+          path: shift-work/dist/SHIFT-0.2.0-unsigned.ipa
+          retention-days: 30
+
+      - name: Upload source
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHIFT-0.2.0-source
+          path: /tmp/SHIFT-v0.2.0-source.tar.gz
+          retention-days: 30
