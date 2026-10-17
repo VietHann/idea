@@ -13,8 +13,8 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - Sources
-    resources:
-      - Resources
+      - path: Resources
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.blobcity.ios
