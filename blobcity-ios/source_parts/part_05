@@ -1,0 +1,95 @@
+            }
+        case .absoluteCinema:
+            chaos = 46
+            run(.playSoundFileNamed("power.wav", waitForCompletion: false))
+            Haptics.heavy()
+            cameraNode.run(.sequence([
+                .scale(to: cameraNode.xScale * 0.88, duration: 0.18),
+                .wait(forDuration: 0.8),
+                .scale(to: cameraNode.xScale, duration: 0.25)
+            ]))
+            confetti()
+        }
+    }
+
+    private func spawnTaxVan() {
+        guard taxVan == nil else { return }
+        let van = SKSpriteNode(imageNamed: "taxvan")
+        van.size = CGSize(width: 116, height: 116)
+        let angle = CGFloat.random(in: 0...(2 * .pi))
+        van.position = CGPoint(x: player.position.x + cos(angle)*650, y: player.position.y + sin(angle)*650)
+        van.zPosition = 35
+        van.name = "taxVan"
+        world.addChild(van)
+        taxVan = van
+        let siren = SKAction.sequence([.colorize(with: .red, colorBlendFactor: 0.35, duration: 0.16), .colorize(withColorBlendFactor: 0, duration: 0.16)])
+        van.run(.repeatForever(siren))
+    }
+
+    private func winGame() {
+        guard !gameEnded else { return }
+        gameEnded = true
+        moveVector = .zero
+        run(.playSoundFileNamed("win.wav", waitForCompletion: false))
+        Haptics.success()
+        confetti()
+
+        let dim = SKShapeNode(rectOf: CGSize(width: 520, height: 980))
+        dim.fillColor = UIColor.black.withAlphaComponent(0.62)
+        dim.strokeColor = .clear
+        dim.zPosition = 900
+        cameraNode.addChild(dim)
+
+        let card = SKShapeNode(rectOf: CGSize(width: 350, height: 350), cornerRadius: 42)
+        card.fillColor = UIColor(red: 0.11, green: 0.09, blue: 0.14, alpha: 0.98)
+        card.strokeColor = UIColor.white.withAlphaComponent(0.12)
+        card.lineWidth = 2
+        card.zPosition = 901
+        cameraNode.addChild(card)
+
+        let title = SKLabelNode(fontNamed: "AvenirNext-Heavy")
+        title.text = "CITY: COOKED 💀"
+        title.fontSize = 30
+        title.position = CGPoint(x: 0, y: 90)
+        title.zPosition = 902
+        cameraNode.addChild(title)
+
+        let s = SKLabelNode(fontNamed: "AvenirNext-Bold")
+        s.text = "SCORE  \(score)"
+        s.fontSize = 20
+        s.fontColor = UIColor(red:0.72, green:1.0, blue:0.45, alpha:1)
+        s.position = CGPoint(x: 0, y: 36)
+        s.zPosition = 902
+        cameraNode.addChild(s)
+
+        let sub = SKLabelNode(fontNamed: "AvenirNext-Medium")
+        sub.text = "bro ate city hall and called it lunch"
+        sub.fontSize = 14
+        sub.fontColor = .white.withAlphaComponent(0.62)
+        sub.position = CGPoint(x: 0, y: 0)
+        sub.zPosition = 902
+        cameraNode.addChild(sub)
+
+        let restart = SKLabelNode(fontNamed: "AvenirNext-Heavy")
+        restart.name = "restartButton"
+        restart.text = "PLAY AGAIN"
+        restart.fontSize = 18
+        restart.fontColor = UIColor(red:0.10, green:0.08, blue:0.14, alpha:1)
+        restart.position = CGPoint(x: 0, y: -98)
+        restart.zPosition = 904
+        let pill = SKShapeNode(rectOf: CGSize(width: 190, height: 58), cornerRadius: 29)
+        pill.name = "restartButton"
+        pill.fillColor = UIColor(red:0.68, green:0.95, blue:0.42, alpha:1)
+        pill.strokeColor = .clear
+        pill.position = CGPoint(x: 0, y: -92)
+        pill.zPosition = 903
+        cameraNode.addChild(pill)
+        cameraNode.addChild(restart)
+    }
+
+    private func restartGame() {
+        guard let v = view else { return }
+        let scene = BlobCityScene(size: size)
+        scene.scaleMode = scaleMode
+        v.presentScene(scene, transition: .fade(withDuration: 0.35))
+    }
