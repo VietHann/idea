@@ -87,107 +87,157 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
+          PAIRS = {'(': ')', '{': '}', '[': ']'}
+          CLOSERS = set(PAIRS.values())
+
           def indent_of(line):
               return line[:len(line) - len(line.lstrip())]
+
+          def scan_balanced_statement(lines, start):
+              stack = []
+              quote = None
+              escape = False
+              began = False
+              for k in range(start, min(len(lines), start + 80)):
+                  text = lines[k]
+                  for ch in text:
+                      if quote:
+                          if escape:
+                              escape = False
+                          elif ch == '\\':
+                              escape = True
+                          elif ch == quote:
+                              quote = None
+                          continue
+                      if ch in ('\"', "'"):
+                          quote = ch
+                          began = True
+                          continue
+                      if ch in PAIRS:
+                          stack.append(PAIRS[ch])
+                          began = True
+                      elif ch in CLOSERS:
+                          if stack and ch == stack[-1]:
+                              stack.pop()
+                          began = True
+                      elif not ch.isspace():
+                          began = True
+                  if began and not stack and text.strip().endswith(';'):
+                      return k
+              return None
+
+          def find_if_condition_end(lines, start):
+              depth = 0
+              began = False
+              quote = None
+              escape = False
+              for k in range(start, min(len(lines), start + 30)):
+                  text = lines[k]
+                  col0 = text.find('(') if k == start else 0
+                  if k == start and col0 < 0:
+                      return None
+                  for col in range(col0, len(text)):
+                      ch = text[col]
+                      if quote:
+                          if escape:
+                              escape = False
+                          elif ch == '\\':
+                              escape = True
+                          elif ch == quote:
+                              quote = None
+                          continue
+                      if ch in ('\"', "'"):
+                          quote = ch
+                          continue
+                      if ch == '(':
+                          depth += 1
+                          began = True
+                      elif ch == ')' and began:
+                          depth -= 1
+                          if depth == 0:
+                              return k, col
+              return None
 
           def fix_file(path: Path):
               lines = path.read_text().splitlines()
               out = []
               i = 0
               changed = False
-
               while i < len(lines):
                   line = lines[i]
                   stripped = line.strip()
                   base_indent = indent_of(line)
-
                   if not stripped.startswith('if (') or '{' in stripped:
                       out.append(line)
                       i += 1
                       continue
 
-                  # Find the end of the if condition even when the condition is
-                  # formatted across several physical lines.
-                  depth = 0
-                  started = False
-                  end_line = None
-                  end_col = None
-                  for k in range(i, min(len(lines), i + 20)):
-                      text = lines[k]
-                      start_col = text.find('(') if k == i else 0
-                      if k == i and start_col < 0:
-                          break
-                      for col in range(start_col, len(text)):
-                          ch = text[col]
-                          if ch == '(':
-                              depth += 1
-                              started = True
-                          elif ch == ')' and started:
-                              depth -= 1
-                              if depth == 0:
-                                  end_line = k
-                                  end_col = col
-                                  break
-                      if end_line is not None:
-                          break
+                  end = find_if_condition_end(lines, i)
+                  if end is None:
+                      out.append(line)
+                      i += 1
+                      continue
+                  end_line, end_col = end
+                  tail = lines[end_line][end_col + 1:].strip()
 
-                  if end_line is None:
+                  # Already a braced body.
+                  if tail.startswith('{'):
                       out.append(line)
                       i += 1
                       continue
 
-                  tail = lines[end_line][end_col + 1:].strip()
-
-                  # Same-line body: if (...) return; / call();
-                  if tail and tail != '{' and tail.endswith(';'):
-                      for k in range(i, end_line):
-                          out.append(lines[k])
-                      condition_line = lines[end_line][:end_col + 1]
-                      out.append(condition_line + ' {')
-                      out.append(base_indent + '  ' + tail)
-                      out.append(base_indent + '}')
-                      changed = True
-                      i = end_line + 1
+                  # Body begins on the same physical line.
+                  if tail:
+                      # Only rewrite simple single statements. Collection-if
+                      # elements usually end with comma and are intentionally skipped.
+                      if tail.endswith(';'):
+                          for k in range(i, end_line):
+                              out.append(lines[k])
+                          out.append(lines[end_line][:end_col + 1] + ' {')
+                          out.append(base_indent + '  ' + tail)
+                          out.append(base_indent + '}')
+                          changed = True
+                          i = end_line + 1
+                          continue
+                      out.append(line)
+                      i += 1
                       continue
 
-                  # Body starts after the condition. If it is already a block,
-                  # leave it alone. Otherwise collect the single statement up to
-                  # its terminating semicolon and wrap that statement in braces.
                   body_start = end_line + 1
-                  if not tail and body_start < len(lines):
-                      body_first = lines[body_start].strip()
-                      if body_first and not body_first.startswith(('{', 'else')):
-                          statement_end = None
-                          for k in range(body_start, min(len(lines), body_start + 30)):
-                              st = lines[k].strip()
-                              # A normal statement ends with ;. Do not treat
-                              # collection elements ending in comma as a body.
-                              if st.endswith(';'):
-                                  statement_end = k
-                                  break
-                              # If indentation returns before a semicolon this is
-                              # not the single-statement shape we want to rewrite.
-                              if k > body_start and len(indent_of(lines[k])) <= len(base_indent):
-                                  break
-                          if statement_end is not None:
-                              for k in range(i, end_line):
-                                  out.append(lines[k])
-                              out.append(lines[end_line] + ' {')
-                              for k in range(body_start, statement_end + 1):
-                                  out.append(lines[k])
-                              out.append(base_indent + '}')
-                              changed = True
-                              i = statement_end + 1
-                              continue
+                  if body_start >= len(lines):
+                      out.append(line)
+                      i += 1
+                      continue
+                  first = lines[body_start].strip()
+                  if not first or first.startswith(('{', 'else')):
+                      out.append(line)
+                      i += 1
+                      continue
 
-                  out.append(line)
-                  i += 1
+                  statement_end = scan_balanced_statement(lines, body_start)
+                  if statement_end is None:
+                      out.append(line)
+                      i += 1
+                      continue
+
+                  # Preserve every condition line exactly, adding the opening brace
+                  # only after the final condition line. Preserve the full body,
+                  # including nested callbacks, until its balanced terminating `;`.
+                  for k in range(i, end_line):
+                      out.append(lines[k])
+                  out.append(lines[end_line] + ' {')
+                  for k in range(body_start, statement_end + 1):
+                      out.append(lines[k])
+                  out.append(base_indent + '}')
+                  changed = True
+                  i = statement_end + 1
 
               if changed:
                   path.write_text('\n'.join(out) + '\n')
 
-          for p in Path('lib').rglob('*.dart'):
-              fix_file(p)
+          # Only fix the file known to contain the remaining strict lint. Other
+          # files are handled by `dart fix`, reducing rewrite risk.
+          fix_file(Path('lib/features/capture/capture_screen.dart'))
           PY
           dart format lib test
           dart fix --apply
