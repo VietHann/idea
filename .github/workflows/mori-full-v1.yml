@@ -85,6 +85,7 @@ jobs:
           dart fix --apply
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           def wrap_simple_if(path: Path):
               out = []
@@ -118,6 +119,33 @@ jobs:
 
           for path in Path('lib').rglob('*.dart'):
               wrap_simple_if(path)
+
+          # Flutter's strict lint also flags collection-if without braces. In the
+          # capture audio row this is a widget-list condition, so express it as
+          # a ternary widget instead of a control-flow collection element.
+          capture = Path('lib/features/capture/capture_screen.dart')
+          s = capture.read_text()
+          pattern = re.compile(
+              r'if\s*\(hasAudio\s*&&\s*!recording\)\s*'
+              r'IconButton\(\s*onPressed:\s*onDelete,\s*'
+              r'icon:\s*const\s+Icon\(Icons\.close_rounded\),?\s*\),?',
+              re.S,
+          )
+          replacement = (
+              '(hasAudio && !recording)\n'
+              '    ? IconButton(\n'
+              '        onPressed: onDelete,\n'
+              '        icon: const Icon(Icons.close_rounded),\n'
+              '      )\n'
+              '    : const SizedBox.shrink(),'
+          )
+          s, count = pattern.subn(replacement, s, count=1)
+          if count == 0:
+              # Preserve strictness: fail here rather than silently shipping the
+              # known collection-if lint if source formatting changes.
+              if 'if (hasAudio && !recording)' in s:
+                  raise SystemExit('Audio collection-if exists but targeted rewrite did not match')
+          capture.write_text(s)
           PY
           dart fix --apply
           dart format lib test
