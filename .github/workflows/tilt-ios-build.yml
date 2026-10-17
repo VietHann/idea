@@ -1,0 +1,114 @@
+name: Build TILT IPA
+
+on:
+  push:
+    branches: [tilt-ios-build]
+    paths:
+      - "tilt-ios/**"
+      - ".github/workflows/tilt-ios-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build unsigned IPA
+    runs-on: macos-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Generate cute app icon
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd tilt-ios
+          ICON="Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png"
+          mkdir -p "$(dirname "$ICON")"
+          python3 - <<'PY'
+          import math
+          W = H = 1024
+          out = '/tmp/tilt-icon.ppm'
+          with open(out, 'wb') as f:
+              f.write(f'P6\n{W} {H}\n255\n'.encode())
+              for y in range(H):
+                  row = bytearray()
+                  for x in range(W):
+                      t = (x + y) / (W + H - 2)
+                      r = int(255 * (1-t) + 196 * t)
+                      g = int(174 * (1-t) + 181 * t)
+                      b = int(207 * (1-t) + 255 * t)
+                      d = ((x-512)**2 + (y-470)**2)**0.5 / 720
+                      glow = max(0, 1-d) * 0.17
+                      r = min(255, int(r + (255-r)*glow))
+                      g = min(255, int(g + (247-g)*glow))
+                      b = min(255, int(b + (235-b)*glow))
+                      if (x-380)**2 + (y-455)**2 < 31**2 or (x-644)**2 + (y-455)**2 < 31**2:
+                          r, g, b = 35, 29, 46
+                      rr = ((x-512)**2 + (y-510)**2)**0.5
+                      if 165 < rr < 179 and y > 510 and 350 < x < 674:
+                          r, g, b = 35, 29, 46
+                      for sx, sy, s in [(780,250,42), (255,260,28), (760,725,26)]:
+                          if abs(x-sx) < s//5 and abs(y-sy) < s or abs(y-sy) < s//5 and abs(x-sx) < s:
+                              r, g, b = 255, 250, 238
+                      row += bytes((r, g, b))
+                  f.write(row)
+          PY
+          sips -s format png /tmp/tilt-icon.ppm --out "$ICON" >/dev/null
+          sips -z 1024 1024 "$ICON" >/dev/null
+          file "$ICON"
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: |
+          cd tilt-ios
+          xcodegen generate
+
+      - name: Build unsigned iPhone app
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd tilt-ios
+          xcodebuild \
+            -project TILT.xcodeproj \
+            -scheme TILT \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            clean build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Package IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd tilt-ios
+          APP_PATH=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name 'TILT.app' | head -1)
+          test -d "$APP_PATH"
+          rm -rf Payload dist
+          mkdir -p Payload dist
+          cp -R "$APP_PATH" Payload/
+          zip -qry "dist/TILT-0.1.0-unsigned.ipa" Payload
+          file "$APP_PATH/TILT"
+          ls -lh "dist/TILT-0.1.0-unsigned.ipa"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TILT-0.1.0-IPA
+          path: tilt-ios/dist/TILT-0.1.0-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 30
