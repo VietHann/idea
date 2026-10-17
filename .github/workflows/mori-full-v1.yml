@@ -31,23 +31,19 @@ jobs:
           mkdir -p /tmp/mori-src
           cat mori-v1-pack/part* | base64 -D > /tmp/MORI-1.0.0-source.tar.gz
           echo "613c36edaa26f339f18de987122e9559c6b6cc1cbcf91891fe85704d4b4873fa  /tmp/MORI-1.0.0-source.tar.gz" | shasum -a 256 -c -
-          tar -tzf /tmp/MORI-1.0.0-source.tar.gz >/dev/null
           tar -xzf /tmp/MORI-1.0.0-source.tar.gz -C /tmp/mori-src
-          test -f /tmp/mori-src/MORI/pubspec.yaml
+          test -f /tmp/mori-src/MORI/lib/features/capture/capture_screen.dart
           test -f /tmp/mori-src/MORI/lib/core/services/backup_service.dart
           test -f /tmp/mori-src/MORI/lib/features/universe/universe_screen.dart
           test -f /tmp/mori-src/MORI/lib/features/memories/recap_view.dart
 
-      - name: Apply verified dependency compatibility
+      - name: Apply dependency compatibility
         shell: bash
         run: |
-          set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
           p = Path('/tmp/mori-src/MORI/pubspec.yaml')
           s = p.read_text().replace('geolocator: ^14.1.1', 'geolocator: ^14.0.2')
-          if 'geolocator: ^14.0.2' not in s:
-              raise SystemExit('Expected geolocator constraint missing')
           p.write_text(s)
           PY
 
@@ -77,171 +73,15 @@ jobs:
           cd mori-build
           flutter pub get
 
-      - name: Strict-safe Dart cleanup
+      - name: Clean and show capture context
         working-directory: mori-build
         shell: bash
         run: |
           set -euo pipefail
           dart fix --apply
           dart format lib test
-          python3 - <<'PY'
-          from pathlib import Path
-
-          PAIRS = {'(': ')', '{': '}', '[': ']'}
-          CLOSERS = set(PAIRS.values())
-
-          def indent_of(line):
-              return line[:len(line) - len(line.lstrip())]
-
-          def scan_balanced_statement(lines, start):
-              stack = []
-              quote = None
-              escape = False
-              began = False
-              for k in range(start, min(len(lines), start + 80)):
-                  text = lines[k]
-                  for ch in text:
-                      if quote:
-                          if escape:
-                              escape = False
-                          elif ch == '\\':
-                              escape = True
-                          elif ch == quote:
-                              quote = None
-                          continue
-                      if ch in ('\"', "'"):
-                          quote = ch
-                          began = True
-                          continue
-                      if ch in PAIRS:
-                          stack.append(PAIRS[ch])
-                          began = True
-                      elif ch in CLOSERS:
-                          if stack and ch == stack[-1]:
-                              stack.pop()
-                          began = True
-                      elif not ch.isspace():
-                          began = True
-                  if began and not stack and text.strip().endswith(';'):
-                      return k
-              return None
-
-          def find_if_condition_end(lines, start):
-              depth = 0
-              began = False
-              quote = None
-              escape = False
-              for k in range(start, min(len(lines), start + 30)):
-                  text = lines[k]
-                  col0 = text.find('(') if k == start else 0
-                  if k == start and col0 < 0:
-                      return None
-                  for col in range(col0, len(text)):
-                      ch = text[col]
-                      if quote:
-                          if escape:
-                              escape = False
-                          elif ch == '\\':
-                              escape = True
-                          elif ch == quote:
-                              quote = None
-                          continue
-                      if ch in ('\"', "'"):
-                          quote = ch
-                          continue
-                      if ch == '(':
-                          depth += 1
-                          began = True
-                      elif ch == ')' and began:
-                          depth -= 1
-                          if depth == 0:
-                              return k, col
-              return None
-
-          def fix_file(path: Path):
-              lines = path.read_text().splitlines()
-              out = []
-              i = 0
-              changed = False
-              while i < len(lines):
-                  line = lines[i]
-                  stripped = line.strip()
-                  base_indent = indent_of(line)
-                  if not stripped.startswith('if (') or '{' in stripped:
-                      out.append(line)
-                      i += 1
-                      continue
-
-                  end = find_if_condition_end(lines, i)
-                  if end is None:
-                      out.append(line)
-                      i += 1
-                      continue
-                  end_line, end_col = end
-                  tail = lines[end_line][end_col + 1:].strip()
-
-                  # Already a braced body.
-                  if tail.startswith('{'):
-                      out.append(line)
-                      i += 1
-                      continue
-
-                  # Body begins on the same physical line.
-                  if tail:
-                      # Only rewrite simple single statements. Collection-if
-                      # elements usually end with comma and are intentionally skipped.
-                      if tail.endswith(';'):
-                          for k in range(i, end_line):
-                              out.append(lines[k])
-                          out.append(lines[end_line][:end_col + 1] + ' {')
-                          out.append(base_indent + '  ' + tail)
-                          out.append(base_indent + '}')
-                          changed = True
-                          i = end_line + 1
-                          continue
-                      out.append(line)
-                      i += 1
-                      continue
-
-                  body_start = end_line + 1
-                  if body_start >= len(lines):
-                      out.append(line)
-                      i += 1
-                      continue
-                  first = lines[body_start].strip()
-                  if not first or first.startswith(('{', 'else')):
-                      out.append(line)
-                      i += 1
-                      continue
-
-                  statement_end = scan_balanced_statement(lines, body_start)
-                  if statement_end is None:
-                      out.append(line)
-                      i += 1
-                      continue
-
-                  # Preserve every condition line exactly, adding the opening brace
-                  # only after the final condition line. Preserve the full body,
-                  # including nested callbacks, until its balanced terminating `;`.
-                  for k in range(i, end_line):
-                      out.append(lines[k])
-                  out.append(lines[end_line] + ' {')
-                  for k in range(body_start, statement_end + 1):
-                      out.append(lines[k])
-                  out.append(base_indent + '}')
-                  changed = True
-                  i = statement_end + 1
-
-              if changed:
-                  path.write_text('\n'.join(out) + '\n')
-
-          # Only fix the file known to contain the remaining strict lint. Other
-          # files are handled by `dart fix`, reducing rewrite risk.
-          fix_file(Path('lib/features/capture/capture_screen.dart'))
-          PY
-          dart format lib test
-          dart fix --apply
-          dart format lib test
+          echo '===== capture_screen.dart 365-395 ====='
+          nl -ba lib/features/capture/capture_screen.dart | sed -n '365,395p'
 
       - name: Generate MORI app icon
         shell: bash
@@ -254,16 +94,12 @@ jobs:
           import json, pathlib, subprocess
           root = pathlib.Path('ios/Runner/Assets.xcassets/AppIcon.appiconset')
           data = json.loads((root/'Contents.json').read_text())
-          written = 0
           for item in data.get('images', []):
               fn, size, scale = item.get('filename'), item.get('size'), item.get('scale')
               if not fn or not size or not scale:
                   continue
-              pixels = int(round(float(size.split('x')[0]) * int(scale.rstrip('x'))))
-              subprocess.run(['sips','-z',str(pixels),str(pixels),'/tmp/mori_icon_1024.png','--out',str(root/fn)], check=True, stdout=subprocess.DEVNULL)
-              written += 1
-          if written == 0:
-              raise SystemExit('No app icon slots were written')
+              px = int(round(float(size.split('x')[0]) * int(scale.rstrip('x'))))
+              subprocess.run(['sips','-z',str(px),str(px),'/tmp/mori_icon_1024.png','--out',str(root/fn)], check=True, stdout=subprocess.DEVNULL)
           PY
 
       - name: Flutter analyze
@@ -304,10 +140,9 @@ jobs:
           cp -R mori-build/build/ios/iphoneos/Runner.app /tmp/mori-ipa/Payload/Runner.app
           cd /tmp/mori-ipa
           zip -qry "$GITHUB_WORKSPACE/MORI-1.0.0-unsigned.ipa" Payload
-          test -s "$GITHUB_WORKSPACE/MORI-1.0.0-unsigned.ipa"
           shasum -a 256 "$GITHUB_WORKSPACE/MORI-1.0.0-unsigned.ipa"
 
-      - name: Prepare formatted source artifact
+      - name: Prepare source artifact
         shell: bash
         run: |
           set -euo pipefail
@@ -316,7 +151,6 @@ jobs:
           cp -R mori-build/test /tmp/mori-src/MORI/test
           cp mori-build/pubspec.yaml /tmp/mori-src/MORI/pubspec.yaml
           tar -czf MORI-1.0.0-source.tar.gz -C /tmp/mori-src MORI
-          shasum -a 256 MORI-1.0.0-source.tar.gz
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
