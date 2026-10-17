@@ -1,0 +1,10 @@
+im=Image.new('RGB',(1024,1024),(250,244,255)); d=ImageDraw.Draw(im)
+for r,c,x,y in [(520,(214,187,255),-100,-80),(470,(255,185,210),620,600),(380,(185,247,173),570,-70)]: d.ellipse((x,y,x+r,y+r),fill=c)
+d.rounded_rectangle((140,140,884,884),radius=190,fill=(34,28,44)); d.ellipse((282,250,742,778),fill=(164,245,106)); d.ellipse((345,280,625,430),fill=(205,255,170)); d.ellipse((390,445,445,510),fill=(32,27,40)); d.ellipse((575,445,630,510),fill=(32,27,40)); d.arc((450,500,570,600),10,170,fill=(32,27,40),width=16); d.rounded_rectangle((330,710,690,805),radius=35,fill=(255,221,104)); d.rectangle((360,650,430,710),fill=(255,150,120)); d.rectangle((470,620,550,710),fill=(127,198,255)); d.rectangle((590,665,655,710),fill=(255,165,210)); im.save(ICON/'AppIcon-1024.png')
+(ICON/'Contents.json').write_text('{"images":[{"filename":"AppIcon-1024.png","idiom":"universal","platform":"ios","size":"1024x1024"}],"info":{"author":"xcode","version":1}}')
+(ROOT/'Assets.xcassets'/'Contents.json').write_text('{"info":{"author":"xcode","version":1}}')
+(ROOT/'Assets.xcassets'/'AccentColor.colorset'/'Contents.json').write_text('{"colors":[{"idiom":"universal","color":{"color-space":"srgb","components":{"red":"0.568","green":"0.929","blue":"0.369","alpha":"1.000"}}}],"info":{"author":"xcode","version":1}}')
+(ROOT/'PrivacyInfo.xcprivacy').write_text('''<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict><key>NSPrivacyTracking</key><false/><key>NSPrivacyTrackingDomains</key><array/><key>NSPrivacyCollectedDataTypes</key><array/><key>NSPrivacyAccessedAPITypes</key><array/></dict></plist>''')
+print('generated',len(list(SPR.glob('*.png'))),'sprites')
