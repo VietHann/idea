@@ -1,0 +1,95 @@
+            .init(texture:"energy", mass:0.6, points:28, display:"ENERGY", mutation:.caffeine, isNPC:false, baseSize:52),
+            .init(texture:"router", mass:0.8, points:34, display:"ROUTER", mutation:.freeWifi, isNPC:false, baseSize:60),
+            .init(texture:"cone", mass:0.9, points:35, display:"CONE", mutation:.roadAuthority, isNPC:false, baseSize:58),
+            .init(texture:"plant", mass:1.0, points:26, display:"PLANT", mutation:nil, isNPC:false, baseSize:58),
+            .init(texture:"chair", mass:1.3, points:32, display:"CHAIR", mutation:nil, isNPC:false, baseSize:65),
+            .init(texture:"trash", mass:1.8, points:42, display:"TRASH", mutation:nil, isNPC:false, baseSize:70),
+            .init(texture:"bench", mass:2.1, points:50, display:"BENCH", mutation:nil, isNPC:false, baseSize:75),
+            .init(texture:"vending", mass:2.5, points:60, display:"VENDING", mutation:nil, isNPC:false, baseSize:80),
+            .init(texture:"atm", mass:2.6, points:66, display:"ATM", mutation:nil, isNPC:false, baseSize:78),
+            .init(texture:"scooter", mass:3.2, points:85, display:"SCOOTER", mutation:nil, isNPC:false, baseSize:92),
+            .init(texture:"car", mass:5.0, points:130, display:"CAR", mutation:nil, isNPC:false, baseSize:108),
+            .init(texture:"bus", mass:8.5, points:210, display:"BUS", mutation:nil, isNPC:false, baseSize:132),
+            .init(texture:"cafe", mass:13, points:330, display:"CAFE", mutation:nil, isNPC:false, baseSize:165),
+            .init(texture:"minimart", mass:14, points:360, display:"MINIMART", mutation:nil, isNPC:false, baseSize:170),
+            .init(texture:"gym", mass:15, points:390, display:"GYM", mutation:nil, isNPC:false, baseSize:170),
+            .init(texture:"billboard", mass:17, points:440, display:"BILLBOARD", mutation:nil, isNPC:false, baseSize:172),
+            .init(texture:"apartment", mass:28, points:750, display:"APARTMENT", mutation:nil, isNPC:false, baseSize:200)
+        ]
+
+        // Small / medium city clutter
+        for _ in 0..<150 {
+            let biased = specs.prefix(14)
+            if let spec = biased.randomElement() { spawn(spec, at: randomPoint(margin: 180)) }
+        }
+        for _ in 0..<36 {
+            let spec = specs[Int.random(in: 14..<specs.count)]
+            spawn(spec, at: randomPoint(margin: 260))
+        }
+
+        // NPCs
+        let npcs: [EntitySpec] = [
+            .init(texture:"npc_civilian", mass:1.1, points:44, display:"CIVILIAN", mutation:nil, isNPC:true, baseSize:64),
+            .init(texture:"npc_office", mass:1.2, points:50, display:"OFFICE NPC", mutation:nil, isNPC:true, baseSize:64),
+            .init(texture:"npc_student", mass:1.0, points:48, display:"STUDENT", mutation:nil, isNPC:true, baseSize:64),
+            .init(texture:"npc_influencer", mass:1.0, points:58, display:"INFLUENCER", mutation:nil, isNPC:true, baseSize:64),
+            .init(texture:"npc_gym", mass:1.8, points:80, display:"GYM BRO", mutation:.gymBro, isNPC:true, baseSize:72),
+            .init(texture:"npc_rider", mass:1.3, points:55, display:"RIDER", mutation:nil, isNPC:true, baseSize:66),
+            .init(texture:"npc_old", mass:1.0, points:99, display:"CHILL OLD GUY", mutation:nil, isNPC:true, baseSize:64)
+        ]
+        for _ in 0..<48 { if let n = npcs.randomElement() { spawn(n, at: randomPoint(margin: 220)) } }
+
+        // Final boss/objective
+        let cityHall = EntitySpec(texture:"cityhall", mass:55, points:3000, display:"CITY HALL", mutation:nil, isNPC:false, baseSize:270)
+        let hall = spawn(cityHall, at: CGPoint(x: 1080, y: 1080))
+        hall.name = "cityHall"
+        addLockedBadge(to: hall)
+    }
+
+    @discardableResult
+    private func spawn(_ spec: EntitySpec, at position: CGPoint) -> SKSpriteNode {
+        let n = SKSpriteNode(imageNamed: spec.texture)
+        n.size = CGSize(width: spec.baseSize, height: spec.baseSize)
+        n.position = position
+        n.zPosition = spec.isNPC ? 15 : 10
+        n.userData = [
+            "mass": NSNumber(value: Double(spec.mass)),
+            "points": NSNumber(value: spec.points),
+            "display": spec.display,
+            "isNPC": NSNumber(value: spec.isNPC),
+            "mutation": spec.mutation?.rawValue ?? ""
+        ]
+        n.name = spec.isNPC ? "npc" : "edible"
+        world.addChild(n)
+        entities.append(n)
+        if spec.isNPC {
+            npcNodes.append(n)
+            let bob = SKAction.sequence([.moveBy(x: 0, y: 5, duration: 0.28), .moveBy(x: 0, y: -5, duration: 0.28)])
+            n.run(.repeatForever(bob))
+        }
+        return n
+    }
+
+    private func addLockedBadge(to node: SKSpriteNode) {
+        let badge = SKLabelNode(fontNamed: "AvenirNext-Heavy")
+        badge.text = "🔒 MASS 55"
+        badge.fontSize = 14
+        badge.fontColor = .white
+        badge.position = CGPoint(x: 0, y: node.size.height * 0.58)
+        badge.name = "lockBadge"
+        node.addChild(badge)
+    }
+
+    private func randomPoint(margin: CGFloat) -> CGPoint {
+        CGPoint(x: CGFloat.random(in: (-worldSize.width/2 + margin)...(worldSize.width/2 - margin)),
+                y: CGFloat.random(in: (-worldSize.height/2 + margin)...(worldSize.height/2 - margin)))
+    }
+
+    override func update(_ currentTime: TimeInterval) {
+        guard !gameEnded else { return }
+        let dt = lastUpdate == 0 ? 1.0/60.0 : min(1.0/20.0, currentTime - lastUpdate)
+        lastUpdate = currentTime
+        elapsed += dt
+        comboTimer -= dt
+        if comboTimer <= 0 { combo = 0 }
+        eventTimer -= dt
