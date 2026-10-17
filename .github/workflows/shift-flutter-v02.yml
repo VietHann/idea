@@ -4,7 +4,7 @@ on:
   push:
     branches: [shift-flutter-v02]
     paths:
-      - 'shift-v2-pack/**'
+      - 'shift-v2-pack2/**'
       - '.github/workflows/shift-flutter-v02.yml'
   workflow_dispatch:
 
@@ -34,7 +34,7 @@ jobs:
           set -euo pipefail
           rm -rf shift-v2-src shift-work
           mkdir -p shift-v2-src
-          cat shift-v2-pack/part* | base64 -D > /tmp/SHIFT-v0.2.0-source.tar.gz
+          cat shift-v2-pack2/part* | base64 -D > /tmp/SHIFT-v0.2.0-source.tar.gz
           echo "b09dd831575be34d6e0c6addc8bb00431c96c9edb40706905ddb45b57dca231e  /tmp/SHIFT-v0.2.0-source.tar.gz" | shasum -a 256 -c -
           tar -tzf /tmp/SHIFT-v0.2.0-source.tar.gz >/dev/null
           tar -xzf /tmp/SHIFT-v0.2.0-source.tar.gz -C shift-v2-src
