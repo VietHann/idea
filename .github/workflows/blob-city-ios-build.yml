@@ -1,0 +1,98 @@
+name: Build BLOB CITY IPA
+
+on:
+  push:
+    branches: [blob-city-ios-final]
+    paths:
+      - 'blobcity-ios/**'
+      - '.github/workflows/blob-city-ios-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blob-city-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build unsigned BLOB CITY IPA
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Reconstruct game source
+        working-directory: blobcity-ios
+        run: |
+          set -euo pipefail
+          cat source_parts/part_* > Sources/BlobCityScene.swift
+          cat asset_gen_parts/part_* > generate_assets.py
+          swiftc -frontend -parse Sources/BlobCityScene.swift
+          echo "Scene lines: $(wc -l < Sources/BlobCityScene.swift)"
+
+      - name: Generate polished game assets
+        working-directory: blobcity-ios
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pillow
+          python3 generate_assets.py
+          python3 generate_audio.py
+          test -f Resources/Sprites/blob_base.png
+          test -f Resources/Sprites/cityhall.png
+          test -f Resources/Audio/blob_theme.wav
+          test -f Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png
+          echo "Sprites: $(find Resources/Sprites -name '*.png' | wc -l)"
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: blobcity-ios
+        run: xcodegen generate
+
+      - name: Build game for iPhone
+        working-directory: blobcity-ios
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project BlobCity.xcodeproj \
+            -scheme BlobCity \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            clean build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Package IPA
+        working-directory: blobcity-ios
+        run: |
+          set -euo pipefail
+          APP_PATH=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name 'BlobCity.app' | head -1)
+          test -n "$APP_PATH"
+          rm -rf Payload dist
+          mkdir -p Payload dist
+          cp -R "$APP_PATH" Payload/
+          VER=$(tr -d ' \t\n\r' < VERSION)
+          zip -qq -r "dist/BlobCity-${VER}-unsigned.ipa" Payload
+          file "$APP_PATH/BlobCity"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist"
+          ls -lh dist/*.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BlobCity-0.1.0-IPA
+          path: blobcity-ios/dist/*.ipa
+          retention-days: 30
