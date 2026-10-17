@@ -1,0 +1,95 @@
+                player.run(.sequence([.scale(to: 0.94, duration: 0.06), .scale(to: 1.0, duration: 0.10)]))
+                if Int.random(in: 0..<24) == 0 {
+                    popText("TOO BIG BRO", at: CGPoint(x: node.position.x, y: node.position.y + node.size.height/2), color: .white, big: false)
+                    Haptics.light()
+                }
+            }
+        }
+    }
+
+    private func consume(_ node: SKSpriteNode, mass: CGFloat, points: Int, display: String) {
+        guard node.parent != nil else { return }
+        consumedCount += 1
+        combo += 1
+        comboTimer = 1.8
+        playerMass += max(0.12, mass * 0.14)
+        score += points * max(1, min(combo, 8))
+        chaos = min(100, chaos + min(7, 1.5 + mass * 0.25))
+
+        let mutationRaw = node.userData?["mutation"] as? String ?? ""
+        let mutation = Mutation(rawValue: mutationRaw)
+
+        let fly = SKAction.group([
+            .move(to: player.position, duration: 0.16),
+            .scale(to: 0.05, duration: 0.16),
+            .rotate(byAngle: .pi, duration: 0.16)
+        ])
+        node.run(.sequence([fly, .removeFromParent()]))
+
+        let sizeScale = min(2.45, 0.88 + sqrt(playerMass) * 0.19)
+        player.size = CGSize(width: 92 * sizeScale, height: 92 * sizeScale)
+        player.run(.sequence([
+            .group([.scaleX(to: 1.16, duration: 0.07), .scaleY(to: 0.90, duration: 0.07)]),
+            .group([.scaleX(to: 1.0, duration: 0.16), .scaleY(to: 1.0, duration: 0.16)])
+        ]))
+
+        let comboText = combo >= 3 ? "  x\(min(combo, 8))" : ""
+        popText("+\(points) \(display)\(comboText)", at: node.position, color: UIColor(red:0.72, green:1.0, blue:0.45, alpha:1), big: combo >= 5)
+        particleBurst(at: node.position, color: chaosColor)
+        run(.playSoundFileNamed(combo >= 5 ? "pop.wav" : "gulp.wav", waitForCompletion: false))
+        if mass > 4 { Haptics.medium() } else { Haptics.light() }
+
+        if let mutation { activateMutation(mutation) }
+        if chaos >= 100 { triggerEvent(.absoluteCinema) }
+    }
+
+    private var chaosColor: UIColor {
+        if chaos < 35 { return UIColor(red:0.68, green:0.95, blue:0.42, alpha:1) }
+        if chaos < 70 { return UIColor.systemOrange }
+        return UIColor(red:1.0, green:0.36, blue:0.66, alpha:1)
+    }
+
+    private func activateMutation(_ mutation: Mutation) {
+        activeMutation = mutation
+        mutationTimer = 12
+        mutationLabel.text = "\(mutation.emoji) \(mutation.rawValue)"
+        showBanner(title: "NEW MUTATION  \(mutation.emoji)", subtitle: mutation.subtitle, accent: chaosColor)
+        run(.playSoundFileNamed("power.wav", waitForCompletion: false))
+        Haptics.success()
+
+        let badge = SKLabelNode(fontNamed: "AvenirNext-Heavy")
+        badge.name = "mutationBadge"
+        badge.text = mutation.emoji
+        badge.fontSize = 34
+        badge.position = CGPoint(x: 0, y: player.size.height * 0.42)
+        badge.zPosition = 90
+        player.childNode(withName: "mutationBadge")?.removeFromParent()
+        player.addChild(badge)
+        badge.run(.repeatForever(.sequence([.moveBy(x: 0, y: 7, duration: 0.35), .moveBy(x: 0, y: -7, duration: 0.35)])))
+    }
+
+    private func clearMutation() {
+        activeMutation = nil
+        mutationLabel.text = ""
+        player.childNode(withName: "mutationBadge")?.removeFromParent()
+    }
+
+    private func triggerRandomEvent() {
+        var events = ChaosEvent.allCases.filter { $0 != .absoluteCinema }
+        if taxVan != nil { events.removeAll { $0 == .taxSeason } }
+        if let event = events.randomElement() { triggerEvent(event) }
+    }
+
+    private func triggerEvent(_ event: ChaosEvent) {
+        showBanner(title: event.title, subtitle: event.subtitle, accent: event == .taxSeason ? .systemRed : chaosColor)
+        switch event {
+        case .monday:
+            world.run(.sequence([.speed(to: 0.72, duration: 0.2), .wait(forDuration: 4.0), .speed(to: 1.0, duration: 0.25)]))
+        case .freeWifiPanic:
+            activateMutation(.freeWifi)
+        case .taxSeason:
+            spawnTaxVan()
+        case .npcPatch:
+            for npc in npcNodes where npc.parent != nil {
+                let angle = CGFloat.random(in: -.pi...(.pi))
+                npc.run(.rotate(byAngle: angle, duration: 0.18))
