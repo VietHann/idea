@@ -43,8 +43,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           p = Path('/tmp/mori-src/MORI/pubspec.yaml')
-          s = p.read_text().replace('geolocator: ^14.1.1', 'geolocator: ^14.0.2')
-          p.write_text(s)
+          p.write_text(p.read_text().replace('geolocator: ^14.1.1', 'geolocator: ^14.0.2'))
           PY
 
       - name: Create clean Flutter iOS project
@@ -73,15 +72,21 @@ jobs:
           cd mori-build
           flutter pub get
 
-      - name: Clean and show capture context
+      - name: Clean and show all strict-lint contexts
         working-directory: mori-build
         shell: bash
         run: |
           set -euo pipefail
           dart fix --apply
           dart format lib test
-          echo '===== capture_screen.dart 365-395 ====='
-          nl -ba lib/features/capture/capture_screen.dart | sed -n '365,395p'
+          echo '===== backup_service.dart 155-175 ====='
+          nl -ba lib/core/services/backup_service.dart | sed -n '155,175p'
+          echo '===== capture_screen.dart 125-145 ====='
+          nl -ba lib/features/capture/capture_screen.dart | sed -n '125,145p'
+          echo '===== capture_screen.dart 336-354 ====='
+          nl -ba lib/features/capture/capture_screen.dart | sed -n '336,354p'
+          echo '===== recap_view.dart 43-58 ====='
+          nl -ba lib/features/memories/recap_view.dart | sed -n '43,58p'
 
       - name: Generate MORI app icon
         shell: bash
