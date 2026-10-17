@@ -80,10 +80,27 @@ jobs:
             echo "No Podfile: modern Flutter iOS dependency layout detected; runtime permissions are scoped by Info.plist."
           fi
 
-      - name: Generate MORI app icon
+      - name: Patch and generate MORI app icon
         shell: bash
         run: |
           set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          paths = [Path('mori-build/tools/generate_icon.swift'), Path('/tmp/mori-src/MORI/tools/generate_icon.swift')]
+          old1 = 'let t1 = AffineTransform(translationByX: 473, byY: 492).concatenated(with: AffineTransform(rotationByDegrees: 10)).concatenated(with: AffineTransform(translationByX: -473, byY: -492))\nback1.transform(using: t1)'
+          new1 = 'var t1 = AffineTransform.identity\nt1.translate(x: 473, y: 492)\nt1.rotate(byDegrees: 10)\nt1.translate(x: -473, y: -492)\nback1.transform(using: t1)'
+          old2 = 'let t2 = AffineTransform(translationByX: 551, byY: 492).concatenated(with: AffineTransform(rotationByDegrees: -10)).concatenated(with: AffineTransform(translationByX: -551, byY: -492))\nback2.transform(using: t2)'
+          new2 = 'var t2 = AffineTransform.identity\nt2.translate(x: 551, y: 492)\nt2.rotate(byDegrees: -10)\nt2.translate(x: -551, y: -492)\nback2.transform(using: t2)'
+          for p in paths:
+              s = p.read_text()
+              if old1 in s:
+                  s = s.replace(old1, new1)
+              if old2 in s:
+                  s = s.replace(old2, new2)
+              if '.concatenated(' in s:
+                  raise SystemExit(f'Unpatched AffineTransform API remains in {p}')
+              p.write_text(s)
+          PY
           cd mori-build
           swift tools/generate_icon.swift /tmp/mori_icon_1024.png
           file /tmp/mori_icon_1024.png
@@ -148,7 +165,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cp /tmp/MORI-0.1.0-source.tar.gz MORI-0.1.0-source.tar.gz
+          tar -czf MORI-0.1.0-source.tar.gz -C /tmp/mori-src MORI
+          shasum -a 256 MORI-0.1.0-source.tar.gz
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
