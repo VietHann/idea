@@ -47,9 +47,8 @@ jobs:
             --project-name shift \
             --org app.viethannn \
             --platforms=ios \
-            --ios-language=swift \
             shift-work/app
-          rm -rf shift-work/app/lib
+          rm -rf shift-work/app/lib shift-work/app/test
           cp -R shift-work/source/SHIFT/lib shift-work/app/lib
           cp shift-work/source/SHIFT/ios_custom/AppDelegate.swift shift-work/app/ios/Runner/AppDelegate.swift
           cp shift-work/source/SHIFT/ios_custom/PrivacyInfo.xcprivacy shift-work/app/ios/Runner/PrivacyInfo.xcprivacy
