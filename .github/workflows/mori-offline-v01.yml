@@ -29,8 +29,8 @@ jobs:
           set -euo pipefail
           rm -rf /tmp/mori-src /tmp/MORI-0.1.0-source.tar.gz
           mkdir -p /tmp/mori-src
-          cat mori-v01-pack2/part* | base64 -D > /tmp/MORI-0.1.0-source.tar.gz
-          echo "1d69b8872216a458814b56d96f232b9d72a74b41afee28de8077ba51a8da652a  /tmp/MORI-0.1.0-source.tar.gz" | shasum -a 256 -c -
+          cat mori-v01-final-pack/part* | base64 -D > /tmp/MORI-0.1.0-source.tar.gz
+          echo "7edaf2f565893d920f041aa59a8d8b32102daa998b08609acddc64fc1d4a6b76  /tmp/MORI-0.1.0-source.tar.gz" | shasum -a 256 -c -
           tar -tzf /tmp/MORI-0.1.0-source.tar.gz >/dev/null
           tar -xzf /tmp/MORI-0.1.0-source.tar.gz -C /tmp/mori-src
           test -f /tmp/mori-src/MORI/pubspec.yaml
