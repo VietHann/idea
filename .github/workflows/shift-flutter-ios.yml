@@ -1,0 +1,109 @@
+name: Build SHIFT Flutter IPA
+
+on:
+  push:
+    branches: [shift-flutter-ios]
+    paths:
+      - 'shift-build/**'
+      - '.github/workflows/shift-flutter-ios.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shift-flutter-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Reconstruct SHIFT app
+        run: |
+          set -euo pipefail
+          rm -rf shift-work
+          mkdir -p shift-work/source shift-work/app
+          tar -xzf shift-build/SHIFT-source.tar.gz -C shift-work/source
+          test -f shift-work/source/SHIFT/lib/main.dart
+          flutter create \
+            --project-name shift \
+            --org app.viethannn \
+            --platforms=ios \
+            --ios-language=swift \
+            shift-work/app
+          rm -rf shift-work/app/lib
+          cp -R shift-work/source/SHIFT/lib shift-work/app/lib
+          cp shift-work/source/SHIFT/ios_custom/AppDelegate.swift shift-work/app/ios/Runner/AppDelegate.swift
+          cp shift-work/source/SHIFT/ios_custom/PrivacyInfo.xcprivacy shift-work/app/ios/Runner/PrivacyInfo.xcprivacy
+
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName SHIFT" shift-work/app/ios/Runner/Info.plist || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string SHIFT" shift-work/app/ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryAddUsageDescription string SHIFT saves your finished photos and motion loops to Photos." shift-work/app/ios/Runner/Info.plist || true
+
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*;/IPHONEOS_DEPLOYMENT_TARGET = 17.0;/g' shift-work/app/ios/Runner.xcodeproj/project.pbxproj
+
+          cd shift-work/source/SHIFT/scripts
+          python3 make_icon.py
+          sips -s format png AppIcon.ppm --out AppIcon.png >/dev/null
+          cd ../../../app
+          ICON_DIR="ios/Runner/Assets.xcassets/AppIcon.appiconset"
+          for icon in "$ICON_DIR"/*.png; do
+            dim=$(sips -g pixelWidth "$icon" | awk '/pixelWidth/ {print $2}')
+            sips -z "$dim" "$dim" ../source/SHIFT/scripts/AppIcon.png --out "$icon" >/dev/null
+          done
+
+      - name: Flutter analyze
+        working-directory: shift-work/app
+        run: flutter analyze
+
+      - name: Build iPhone app
+        working-directory: shift-work/app
+        run: |
+          set -euo pipefail
+          flutter build ios \
+            --release \
+            --no-codesign \
+            --build-name=0.1.0 \
+            --build-number=1
+
+      - name: Package unsigned IPA
+        working-directory: shift-work/app
+        run: |
+          set -euo pipefail
+          APP_PATH="build/ios/iphoneos/Runner.app"
+          test -d "$APP_PATH"
+          file "$APP_PATH/Runner"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist"
+          test -d "$APP_PATH/Frameworks/App.framework/flutter_assets"
+          rm -rf Payload dist
+          mkdir -p Payload dist
+          cp -R "$APP_PATH" Payload/
+          zip -qq -r dist/SHIFT-0.1.0-unsigned.ipa Payload
+          ls -lh dist/SHIFT-0.1.0-unsigned.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHIFT-0.1.0-IPA
+          path: shift-work/app/dist/SHIFT-0.1.0-unsigned.ipa
+          retention-days: 30
+
+      - name: Upload source bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHIFT-0.1.0-source
+          path: shift-build/SHIFT-source.tar.gz
+          retention-days: 30
