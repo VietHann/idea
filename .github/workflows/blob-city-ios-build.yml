@@ -42,9 +42,11 @@ jobs:
         working-directory: blobcity-ios
         run: |
           set -euo pipefail
-          python3 -m pip install --quiet pillow
-          python3 generate_assets.py
-          python3 generate_audio.py
+          python3 -m venv .venv-assets
+          source .venv-assets/bin/activate
+          python -m pip install --quiet pillow
+          python generate_assets.py
+          python generate_audio.py
           test -f Resources/Sprites/blob_base.png
           test -f Resources/Sprites/cityhall.png
           test -f Resources/Audio/blob_theme.wav
