@@ -38,6 +38,25 @@ jobs:
           test -f /tmp/mori-src/MORI/lib/core/storage/local_database.dart
           test -f /tmp/mori-src/MORI/test/memory_test.dart
 
+      - name: Patch source compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          repo = Path('/tmp/mori-src/MORI/lib/data/repositories/memory_repository.dart')
+          s = repo.read_text()
+          imp = "import 'package:sqflite/sqflite.dart';\n"
+          if imp not in s:
+              s = imp + s
+          repo.write_text(s)
+
+          settings = Path('/tmp/mori-src/MORI/lib/features/settings/settings_screen.dart')
+          s = settings.read_text().replace('Icons.database_outlined', 'Icons.storage_rounded')
+          settings.write_text(s)
+          PY
+
       - name: Create clean Flutter iOS project
         shell: bash
         run: |
@@ -61,6 +80,17 @@ jobs:
 
           cd mori-build
           flutter pub get
+
+      - name: Apply safe Dart fixes and sync source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd mori-build
+          dart fix --apply
+          dart format lib test
+          rm -rf /tmp/mori-src/MORI/lib /tmp/mori-src/MORI/test
+          cp -R lib /tmp/mori-src/MORI/lib
+          cp -R test /tmp/mori-src/MORI/test
 
       - name: Configure iOS privacy build settings
         shell: bash
