@@ -40,6 +40,23 @@ jobs:
           test -f /tmp/mori-src/MORI/lib/features/universe/universe_screen.dart
           test -f /tmp/mori-src/MORI/test/memory_test.dart
 
+      - name: Apply verified dependency compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('/tmp/mori-src/MORI/pubspec.yaml')
+          s = p.read_text()
+          old = 'geolocator: ^14.1.1'
+          new = 'geolocator: ^14.0.2'
+          if old in s:
+              s = s.replace(old, new)
+          if new not in s:
+              raise SystemExit('Expected geolocator constraint missing')
+          p.write_text(s)
+          PY
+
       - name: Create clean Flutter iOS project
         shell: bash
         run: |
@@ -145,6 +162,7 @@ jobs:
           rm -rf /tmp/mori-src/MORI/lib /tmp/mori-src/MORI/test
           cp -R mori-build/lib /tmp/mori-src/MORI/lib
           cp -R mori-build/test /tmp/mori-src/MORI/test
+          cp mori-build/pubspec.yaml /tmp/mori-src/MORI/pubspec.yaml
           tar -czf MORI-1.0.0-source.tar.gz -C /tmp/mori-src MORI
           shasum -a 256 MORI-1.0.0-source.tar.gz
 
